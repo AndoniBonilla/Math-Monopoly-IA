@@ -1,0 +1,85 @@
+import numpy as np
+import scipy.linalg as la
+
+# Monopoly board size
+BOARD_SIZE = 40
+
+# 🎲 Dice Roll Probabilities for Two Six-Sided Dice
+def calculate_roll_probabilities():
+    roll_probabilities = [1, 2, 3, 4, 5, 6, 5, 4, 3, 2, 1]
+    return np.array([x / 36 for x in roll_probabilities])
+
+# 🎯 Create the Transition Matrix for player movement
+def create_transition_matrix():
+    roll_probs = calculate_roll_probabilities()
+    transition_matrix = np.zeros((BOARD_SIZE, BOARD_SIZE))
+
+    for i in range(BOARD_SIZE):
+        for j, prob in enumerate(roll_probs):
+            transition_matrix[(i + j + 2) % BOARD_SIZE, i] += prob
+
+    return transition_matrix
+
+# 🚓 Handle "Go to Jail" & Special Cases
+def apply_special_rules(transition_matrix):
+    # Move all probabilities from "Go to Jail" (Square 30 → 10)
+    transition_matrix[10, 30] = 1
+    transition_matrix[:, 30] = 0  # Zero out old column
+
+    # Chance & Community Chest Adjustments
+    chance_squares = [7, 22, 36]
+    community_squares = [2, 17, 33]
+
+    for square in chance_squares:
+        transition_matrix[0, square] += 6/16  # Moves to GO, Illinois, Boardwalk, etc.
+        transition_matrix[10, square] += 6/16  # Moves to Jail or other locations
+        transition_matrix[square, square] += 4/16  # Stays on the same square (4/16)
+
+    for square in community_squares:
+        transition_matrix[0, square] += 2/16  # Moves to GO
+        transition_matrix[10, square] += 2/16  # Moves to Jail
+        transition_matrix[square, square] += 12/16  # Stays on the same square (14/16)
+
+    return transition_matrix
+
+# 📌 Compute Steady-State Probabilities
+def compute_steady_state(transition_matrix):
+    eigenvalues, eigenvectors = la.eig(transition_matrix)
+    steady_state = np.real(eigenvectors[:, np.argmax(eigenvalues)])
+    steady_state /= np.sum(steady_state)
+    return steady_state
+
+# 📊 Display Landing Probabilities for All Spaces
+def display_all_landing_probabilities(steady_state):
+    property_names = {
+        0: "GO", 1: "Mediterranean Ave", 2: "Community Chest (2)", 3: "Baltic Ave", 
+        4: "Income Tax", 5: "Reading Railroad", 6: "Oriental Ave", 7: "Chance (7)", 
+        8: "Vermont Ave", 9: "Connecticut Ave", 10: "Jail (Visiting/In Jail)", 
+        11: "St. Charles Place", 12: "Electric Company", 13: "States Ave", 
+        14: "Virginia Ave", 15: "Pennsylvania Railroad", 16: "St. James Place", 
+        17: "Community Chest (17)", 18: "Tennessee Ave", 19: "New York Ave", 
+        20: "Free Parking", 21: "Kentucky Ave", 22: "Chance (22)", 23: "Indiana Ave", 
+        24: "Illinois Ave", 25: "B&O Railroad", 26: "Atlantic Ave", 27: "Ventnor Ave", 
+        28: "Water Works", 29: "Marvin Gardens", 30: "Go to Jail", 
+        31: "Pacific Ave", 32: "North Carolina Ave", 33: "Community Chest (33)", 
+        34: "Pennsylvania Ave", 35: "Short Line Railroad", 36: "Chance (36)", 
+        37: "Park Place", 38: "Luxury Tax", 39: "Boardwalk"
+    }
+
+    # Sort squares by probability
+    sorted_indices = np.argsort(-steady_state)  # Descending order
+    print("\n📊 **Landing Probability for All Monopoly Spaces** 📊")
+    for index in sorted_indices:
+        print(f"{property_names.get(index, f'Square {index}')}: {steady_state[index]:.4%}")
+
+# 🚀 Run the Monopoly Markov Model
+def run_monopoly_analysis():
+    transition_matrix = create_transition_matrix()
+    transition_matrix = apply_special_rules(transition_matrix)
+    steady_state = compute_steady_state(transition_matrix)
+
+    # Display landing probabilities for all spaces
+    display_all_landing_probabilities(steady_state)
+
+# Execute the model
+run_monopoly_analysis()
