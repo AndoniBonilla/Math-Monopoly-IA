@@ -1,0 +1,1965 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Monopoly ROI Simulator</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+/* ===== RESET & BASE ===== */
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Georgia',serif;background:#1a472a;color:#f5e6c8;min-height:100vh;padding:14px 10px}
+
+/* ===== HEADER ===== */
+#app-header{text-align:center;margin-bottom:12px}
+#app-header h1{font-size:1.9rem;color:#ffd700;text-shadow:2px 2px 6px rgba(0,0,0,.8);letter-spacing:3px}
+#app-header p{font-size:.8rem;color:#a5d6a7;margin-top:3px}
+
+/* ===== CONTROLS ===== */
+#controls{display:flex;justify-content:center;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.ctrl-label{font-size:.85rem;color:#ffd700;font-weight:bold}
+select,button{padding:7px 15px;border-radius:6px;border:2px solid #ffd700;font-family:'Georgia',serif;font-size:.85rem;cursor:pointer;transition:.2s}
+select{background:#2d5a27;color:#fff}
+.btn-run{background:#c41e3a;color:#fff;font-weight:bold}
+.btn-run:hover{background:#9b1631}
+.btn-skip{background:#1565C0;color:#fff;font-weight:bold}
+.btn-skip:hover{background:#0d47a1}
+.btn-reset{background:#5d4037;color:#fff}
+.btn-reset:hover{background:#4e342e}
+button:disabled{opacity:.45;cursor:not-allowed}
+.speed-wrap{display:flex;align-items:center;gap:6px;font-size:.8rem;color:#ffd700}
+input[type=range]{width:90px;accent-color:#ffd700}
+
+/* ===== TABS ===== */
+#tab-bar{display:flex;justify-content:center;gap:8px;margin-bottom:14px}
+.tab-btn{
+  padding:8px 24px;border-radius:8px 8px 0 0;border:2px solid #ffd700;border-bottom:none;
+  background:#1a4a22;color:#ffd700;font-family:'Georgia',serif;font-size:.9rem;
+  cursor:pointer;letter-spacing:1px;transition:.15s
+}
+.tab-btn.active{background:#ffd700;color:#1a1a1a;font-weight:bold}
+.tab-btn:hover:not(.active){background:#2d6a32}
+.tab-divider{height:2px;background:#ffd700;margin-bottom:14px;border-radius:1px}
+
+/* ===== GAME AREA ===== */
+#game-area{display:flex;gap:14px;justify-content:center;align-items:flex-start;flex-wrap:wrap}
+
+/* ===== PROPERTY LIST VIEW ===== */
+#proplist-view{max-width:900px;margin:0 auto}
+#proplist-view h2{color:#ffd700;font-size:1.3rem;text-align:center;margin-bottom:4px}
+#proplist-hint{text-align:center;font-size:.78rem;color:#a5d6a7;margin-bottom:14px}
+
+/* Filter chips */
+#prop-filters{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-bottom:16px}
+.fchip{
+  padding:4px 12px;border-radius:20px;border:2px solid transparent;
+  font-size:.72rem;font-weight:bold;cursor:pointer;transition:.15s;
+  background:rgba(255,255,255,.08);color:#fff
+}
+.fchip:hover{background:rgba(255,255,255,.18)}
+.fchip.active{border-color:#fff;background:rgba(255,255,255,.22)}
+.fchip.fc-all{border-color:#ffd700;color:#ffd700}
+.fchip.fc-all.active{background:#ffd700;color:#1a1a1a}
+
+/* Color group section */
+.pgroup{margin-bottom:18px;border-radius:8px;overflow:hidden;border:1px solid rgba(255,255,255,.1)}
+.pgroup-header{
+  display:flex;align-items:center;gap:10px;
+  padding:8px 14px;font-size:.85rem;font-weight:bold;color:#fff;letter-spacing:1px
+}
+.pgroup-swatch{width:20px;height:20px;border-radius:4px;flex-shrink:0;border:2px solid rgba(255,255,255,.4)}
+
+/* Property rows */
+.prow{
+  display:grid;
+  grid-template-columns:1fr 60px 80px 80px 85px 80px 110px;
+  align-items:center;gap:0;
+  padding:8px 14px;
+  background:rgba(0,0,0,.3);
+  border-top:1px solid rgba(255,255,255,.06);
+  transition:background .15s
+}
+.prow:hover{background:rgba(255,255,255,.07)}
+/* header row of the table */
+.prow-head{
+  grid-template-columns:1fr 60px 80px 80px 85px 80px 110px;
+  background:rgba(0,0,0,.5);
+  padding:5px 14px;font-size:.62rem;color:#aaa;text-transform:uppercase;letter-spacing:.8px
+}
+.prow-head,.prow{display:grid;align-items:center;gap:0}
+
+.pr-name{font-size:.78rem;font-weight:bold;color:#fff}
+.pr-price{font-size:.75rem;color:#ffd700;text-align:right}
+.pr-invest{font-size:.73rem;color:#c8e6c9;text-align:right}
+.pr-rent1{font-size:.73rem;color:#80cbc4;text-align:right}
+.pr-hotel{font-size:.73rem;color:#ef9a9a;text-align:right}
+.pr-roi{font-size:.8rem;font-weight:bold;color:#ffd700;text-align:right}
+.pr-roi.na{color:#555;font-weight:normal}
+
+/* Rating stars + bar */
+.pr-rating{display:flex;flex-direction:column;align-items:flex-end;gap:2px}
+.stars{font-size:.85rem;letter-spacing:1px}
+.roi-bar-wrap{width:70px;height:5px;background:rgba(255,255,255,.12);border-radius:3px;overflow:hidden}
+.roi-bar{height:100%;border-radius:3px;transition:width .4s ease}
+
+@media(max-width:700px){
+  .prow,.prow-head{grid-template-columns:1fr 55px 70px 70px}
+  .pr-invest,.pr-hotel,.pr-rating{display:none}
+}
+
+/* ===== HOUSE INDICATOR (shown on board spaces) ===== */
+.house-ind{
+  position:absolute;bottom:2px;right:2px;
+  font-size:8px;font-weight:bold;line-height:1;
+  background:rgba(0,0,0,.72);border-radius:3px;padding:1px 3px;
+  z-index:6;display:none;pointer-events:none
+}
+/* re-position for left/right column spaces so it doesn't overlap the color band */
+.space.col-left  .house-ind{right:2px;left:auto;bottom:3px}
+.space.col-right .house-ind{right:auto;left:2px;bottom:3px}
+
+/* ===== HOUSE ROI BREAKDOWN TAB ===== */
+#breakdown-view{max-width:1000px;margin:0 auto}
+#breakdown-view h2{color:#ffd700;font-size:1.3rem;text-align:center;margin-bottom:4px}
+#bd-hint{text-align:center;font-size:.78rem;color:#a5d6a7;margin-bottom:14px}
+
+/* Sort controls */
+#bd-sort-bar{display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:14px;flex-wrap:wrap;font-size:.8rem;color:#ffd700}
+#bd-sort-bar select{padding:5px 10px;font-size:.8rem}
+
+/* Breakdown table wrapper for horizontal scroll */
+#bd-table-wrap{overflow-x:auto;border-radius:8px}
+
+/* Breakdown table */
+.bdtable{width:100%;border-collapse:collapse;font-size:.73rem;min-width:700px}
+.bdtable th{
+  background:#0d2d13;color:#ffd700;text-align:center;
+  padding:7px 8px;font-size:.65rem;text-transform:uppercase;letter-spacing:.7px;
+  border-bottom:2px solid #ffd700;white-space:nowrap
+}
+.bdtable th.col-prop{text-align:left;min-width:150px}
+.bdtable td{
+  padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.06);
+  text-align:center;vertical-align:middle;color:#fff
+}
+.bdtable tr:hover td{background:rgba(255,255,255,.04)}
+.bdtable td.col-prop{text-align:left}
+
+/* Property name cell with color dot */
+.bd-name{display:flex;align-items:center;gap:7px}
+.bd-dot{width:10px;height:10px;border-radius:2px;flex-shrink:0}
+.bd-propname{font-weight:bold;font-size:.73rem}
+.bd-lands{font-size:.78rem;font-weight:bold;color:#ffd700}
+.bd-lands.na{color:#555;font-weight:normal}
+
+/* Each ROI cell */
+.roi-cell{border-radius:4px;padding:4px 6px;display:flex;flex-direction:column;align-items:center;gap:1px}
+.roi-cell .rc-roi{font-size:.78rem;font-weight:bold}
+.roi-cell .rc-rent{font-size:.6rem;color:rgba(255,255,255,.6)}
+.roi-cell .rc-invest{font-size:.57rem;color:rgba(255,255,255,.45)}
+.roi-cell.na-cell{color:#444}
+
+/* Best level highlight */
+.roi-cell.best{outline:2px solid #ffd700;outline-offset:-1px}
+
+/* ROI color scale classes (set dynamically via inline style) */
+.bd-legend{display:flex;gap:6px;align-items:center;justify-content:flex-end;font-size:.65rem;color:#aaa;margin-top:8px;flex-wrap:wrap}
+.bd-legend-bar{display:flex;height:10px;width:120px;border-radius:3px;overflow:hidden}
+.bd-legend-seg{flex:1}
+
+/* ===== BOARD ===== */
+#board-wrapper{position:relative;flex-shrink:0}
+#board{
+  display:grid;
+  grid-template-columns:70px repeat(9,56px) 70px;
+  grid-template-rows:70px repeat(9,56px) 70px;
+  width:644px;height:644px;
+  border:5px solid #1a1a1a;
+  background:#c8e6a0;
+  position:relative
+}
+#board-center{
+  grid-column:2/11;grid-row:2/11;
+  background:#c8e6a0;
+  display:flex;align-items:center;justify-content:center;flex-direction:column;
+  gap:6px
+}
+#board-logo{
+  font-size:2rem;font-weight:900;color:#c41e3a;
+  letter-spacing:5px;text-align:center;
+  transform:rotate(-45deg);line-height:1.05;
+  text-shadow:2px 2px 0 #000;user-select:none
+}
+#board-sub{font-size:.55rem;color:#555;text-align:center;transform:rotate(-45deg);letter-spacing:1px}
+
+/* ===== SPACES ===== */
+.space{
+  position:relative;border:1px solid #888;
+  overflow:hidden;background:#fffde7;
+  font-size:6px;cursor:default
+}
+.space.corner{background:#c8e6a0;font-size:7.5px;font-weight:bold}
+.space.special{background:#f0f4ff}
+
+/* Color bands — outer edge of board */
+.space.row-bottom .color-band{position:absolute;bottom:0;left:0;right:0;height:14px}
+.space.col-left   .color-band{position:absolute;top:0;left:0;bottom:0;width:14px}
+.space.row-top    .color-band{position:absolute;top:0;left:0;right:0;height:14px}
+.space.col-right  .color-band{position:absolute;top:0;right:0;bottom:0;width:14px}
+
+.cb-brown    {background:#8B4513}
+.cb-lightblue{background:#87CEEB}
+.cb-pink     {background:#D93A96}
+.cb-orange   {background:#F7941D}
+.cb-red      {background:#ED1B24}
+.cb-yellow   {background:#FEF200}
+.cb-green    {background:#1FB25A}
+.cb-darkblue {background:#0072BB}
+.cb-railroad {background:#1a1a1a}
+.cb-utility  {background:#90a4ae}
+
+/* Inner text area */
+.space-inner{
+  position:absolute;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  text-align:center;font-size:5.8px;line-height:1.2;gap:1px;padding:2px
+}
+.space.row-bottom .space-inner{top:0;left:0;right:0;bottom:14px}
+.space.col-left   .space-inner{top:0;left:14px;right:0;bottom:0;writing-mode:vertical-rl;transform:rotate(180deg)}
+.space.row-top    .space-inner{top:14px;left:0;right:0;bottom:0}
+.space.col-right  .space-inner{top:0;left:0;right:14px;bottom:0;writing-mode:vertical-rl}
+.space.corner     .space-inner{top:0;left:0;right:0;bottom:0}
+
+.sname{font-size:5.8px;font-weight:bold;color:#1a1a1a;text-transform:uppercase;letter-spacing:.3px}
+.sprice{font-size:5.3px;color:#333}
+.sicon{font-size:11px;line-height:1}
+
+/* Space landing count overlay (shown after sim) */
+.landing-badge{
+  position:absolute;top:2px;right:2px;
+  background:rgba(0,0,0,.65);color:#ffd700;
+  font-size:5.5px;font-weight:bold;
+  border-radius:3px;padding:1px 2px;
+  line-height:1;display:none;z-index:5
+}
+
+/* Event flash animations */
+@keyframes flashJail{0%,100%{background:#fffde7}50%{background:#ff6b6b;box-shadow:0 0 14px #f00}}
+@keyframes flashRent{0%,100%{background:#fffde7}50%{background:#fff176;box-shadow:0 0 14px #ffd700}}
+@keyframes flashRR  {0%,100%{background:#fffde7}50%{background:#b2dfdb;box-shadow:0 0 14px #0097a7}}
+.flash-jail{animation:flashJail .7s ease-in-out}
+.flash-rent{animation:flashRent .7s ease-in-out}
+.flash-rr  {animation:flashRR   .7s ease-in-out}
+
+/* ===== PLAYER TOKENS ===== */
+.token{
+  position:absolute;width:13px;height:13px;border-radius:50%;
+  border:2px solid rgba(0,0,0,.7);z-index:10;
+  transition:left .22s ease,top .22s ease;
+  box-shadow:0 2px 5px rgba(0,0,0,.7);pointer-events:none
+}
+#tok0{background:#e53935}
+#tok1{background:#1e88e5}
+#tok2{background:#43a047}
+#tok3{background:#fdd835;border-color:#777}
+
+/* ===== INFO PANEL ===== */
+#info-panel{width:210px;display:flex;flex-direction:column;gap:10px}
+.pcard{background:rgba(0,0,0,.42);border:1px solid rgba(255,215,0,.25);border-radius:8px;padding:10px}
+.pcard h3{color:#ffd700;font-size:.73rem;margin-bottom:7px;border-bottom:1px solid rgba(255,215,0,.2);padding-bottom:3px;text-transform:uppercase;letter-spacing:1px}
+
+#turn-num{font-size:1.5rem;color:#fff;text-align:center;font-weight:bold}
+#turn-sub{font-size:.65rem;color:#a5d6a7;text-align:center}
+#cur-player{display:flex;align-items:center;gap:7px;font-size:.75rem;margin-top:4px}
+.pdot{width:12px;height:12px;border-radius:50%;border:2px solid rgba(0,0,0,.5);flex-shrink:0}
+
+#dice-row{display:flex;gap:8px;justify-content:center;margin:3px 0}
+.die{width:30px;height:30px;background:#fff;border-radius:5px;border:2px solid #333;
+  display:flex;align-items:center;justify-content:center;
+  font-size:1.1rem;font-weight:bold;color:#1a1a1a;box-shadow:2px 2px 0 #666}
+#dice-sum{font-size:.7rem;color:#c8e6c9;text-align:center}
+
+#log-list{list-style:none;font-size:.67rem;max-height:145px;overflow-y:auto;display:flex;flex-direction:column;gap:3px}
+#log-list li{padding:2px 5px;border-radius:3px;border-left:3px solid #555;background:rgba(255,255,255,.05);color:#e8f5e9}
+#log-list li.ev-jail{border-color:#ef5350}
+#log-list li.ev-rent    {border-color:#ffd700}
+#log-list li.ev-rr      {border-color:#26c6da}
+#log-list li.ev-go      {border-color:#66bb6a}
+#log-list li.ev-bankrupt{border-color:#ff6b6b;color:#ff6b6b;font-weight:bold}
+
+/* ===== EVENT BANNER ===== */
+#banner{
+  position:fixed;top:46%;left:50%;transform:translate(-50%,-50%);
+  padding:11px 22px;border-radius:9px;font-size:1rem;font-weight:bold;
+  z-index:200;pointer-events:none;opacity:0;text-align:center;max-width:280px
+}
+@keyframes bannerAnim{
+  0%  {opacity:0;transform:translate(-50%,-50%) scale(.8)}
+  15% {opacity:1;transform:translate(-50%,-50%) scale(1.06)}
+  80% {opacity:1;transform:translate(-50%,-50%) scale(1)}
+  100%{opacity:0;transform:translate(-50%,-50%) scale(.9)}
+}
+#banner.show{animation:bannerAnim 1.3s ease forwards}
+#banner.bj{background:#b71c1c;color:#fff;border:3px solid #ef9a9a}
+#banner.br{background:#e65100;color:#fff;border:3px solid #ffcc80}
+#banner.bg{background:#006064;color:#fff;border:3px solid #80deea}
+
+/* ===== RESULTS ===== */
+#results{
+  margin:20px auto 0;max-width:920px;
+  background:rgba(0,0,0,.48);border:2px solid rgba(255,215,0,.3);
+  border-radius:12px;padding:20px
+}
+#results h2{color:#ffd700;font-size:1.35rem;text-align:center;margin-bottom:3px}
+#res-sub{text-align:center;color:#a5d6a7;font-size:.78rem;margin-bottom:18px}
+
+.res-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px}
+@media(max-width:680px){.res-grid{grid-template-columns:1fr}}
+.rsec h3{color:#ffd700;font-size:.82rem;margin-bottom:9px;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid rgba(255,215,0,.2);padding-bottom:3px}
+
+.prop-card{
+  display:flex;align-items:center;gap:9px;
+  padding:7px 9px;border-radius:6px;
+  background:rgba(255,255,255,.05);margin-bottom:5px;
+  border-left:5px solid #555
+}
+.prop-card:hover{background:rgba(255,255,255,.1)}
+.pc-rank{font-size:.95rem;font-weight:bold;color:#ffd700;min-width:18px;text-align:center}
+.pc-name{flex:1;font-size:.72rem;color:#fff;font-weight:bold}
+.pc-stats{font-size:.62rem;color:#a5d6a7;text-align:right;line-height:1.4}
+.pc-roi{font-size:.88rem;font-weight:bold;color:#ffd700;min-width:48px;text-align:right}
+
+.chart-sec h3{color:#ffd700;font-size:.82rem;margin-bottom:10px;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid rgba(255,215,0,.2);padding-bottom:3px}
+.chart-box{background:rgba(255,255,255,.05);border-radius:8px;padding:12px;height:280px;position:relative;margin-bottom:18px}
+#balance-rows{display:flex;flex-direction:column;gap:6px}
+.bal-row{display:flex;flex-direction:column;gap:2px;opacity:.35;transition:opacity .25s}
+.bal-row.active-player{opacity:1}
+.bal-row.alive{opacity:.7}
+.bal-top{display:flex;align-items:center;gap:6px}
+.bal-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.bal-name{font-size:.72rem;color:#ccc;flex:1}
+.bal-amt{font-size:.8rem;font-weight:bold;color:#fff;text-align:right}
+.bal-track{height:5px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden}
+.bal-fill{height:100%;border-radius:3px;transition:width .35s ease}
+#money-scoreboard{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.money-pill{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:20px;border:2px solid;font-size:.82rem;background:rgba(0,0,0,.3)}
+.money-pill strong{font-size:.95rem}
+.money-peak{opacity:.55;font-size:.72rem;margin-left:2px}
+.bal-row.bankrupt{opacity:.45}
+.bal-row.bankrupt .bal-amt{color:#ff6b6b!important;font-size:.7rem;letter-spacing:.5px}
+.bal-row.bankrupt .bal-fill{background:#555!important}
+.bal-props{display:flex;flex-wrap:wrap;gap:2px;margin-top:3px;min-height:8px}
+.prop-chip{width:10px;height:10px;border-radius:2px;flex-shrink:0;title:''}
+.prop-chip.railroad{border-radius:50%}
+.prop-chip.utility{border-radius:3px;border:1px solid rgba(255,255,255,.3)}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="app-header">
+    <h1>&#127922; MONOPOLY ROI SIMULATOR</h1>
+    <p>Simulate 100 turns to discover which properties deliver the best return on investment</p>
+  </div>
+
+  <!-- TAB NAVIGATION -->
+  <div id="tab-bar">
+    <button class="tab-btn active" id="tab-sim"       onclick="switchTab('sim')">&#127922; Board Simulation</button>
+    <button class="tab-btn"        id="tab-props"    onclick="switchTab('props')">&#128198; Property List</button>
+    <button class="tab-btn"        id="tab-breakdown" onclick="switchTab('breakdown')">&#128200; House ROI Breakdown</button>
+  </div>
+  <div class="tab-divider"></div>
+
+  <div id="sim-view">
+  <div id="controls">
+    <span class="ctrl-label">Players:</span>
+    <select id="numPlayers">
+      <option value="1">1 Player</option>
+      <option value="2" selected>2 Players</option>
+      <option value="3">3 Players</option>
+      <option value="4">4 Players</option>
+    </select>
+    <span class="ctrl-label">Speed:</span>
+    <div class="speed-wrap">
+      <span>Slow</span>
+      <input type="range" id="speedSlider" min="1" max="5" value="3">
+      <span>Fast</span>
+    </div>
+    <button class="btn-run"   id="runBtn">&#9654; Run Simulation</button>
+    <button class="btn-skip"  id="skipBtn">&#9197; Skip to Results</button>
+    <button class="btn-reset" id="resetBtn">&#8635; Reset</button>
+  </div>
+
+  <div id="game-area">
+    <!-- BOARD -->
+    <div id="board-wrapper">
+      <div id="board">
+        <div id="board-center">
+          <div id="board-logo">MONO<br>POLY</div>
+          <div id="board-sub">ROI SIMULATOR</div>
+        </div>
+        <!-- spaces injected by JS -->
+      </div>
+      <!-- Tokens overlaid on board -->
+      <div id="tok0" class="token"></div>
+      <div id="tok1" class="token" style="display:none"></div>
+      <div id="tok2" class="token" style="display:none"></div>
+      <div id="tok3" class="token" style="display:none"></div>
+    </div>
+
+    <!-- INFO PANEL -->
+    <div id="info-panel">
+      <div class="pcard">
+        <h3>Progress</h3>
+        <div id="turn-num">Turn 0</div>
+        <div id="turn-sub">of 200 per player</div>
+        <div id="cur-player">
+          <div class="pdot" id="pdot"></div>
+          <span id="pname">Ready</span>
+        </div>
+      </div>
+      <div class="pcard">
+        <h3>Dice Roll</h3>
+        <div id="dice-row">
+          <div class="die" id="d1">&#8212;</div>
+          <div class="die" id="d2">&#8212;</div>
+        </div>
+        <div id="dice-sum"></div>
+      </div>
+      <div class="pcard">
+        <h3>Event Log</h3>
+        <ul id="log-list"></ul>
+      </div>
+      <div class="pcard" id="balance-card">
+        <h3>&#128176; Balances</h3>
+        <div id="balance-rows"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RESULTS (hidden until sim done) -->
+  <div id="results" style="display:none">
+    <h2>&#128200; ROI Analysis Results</h2>
+    <div id="res-sub"></div>
+    <div class="res-grid">
+      <div class="rsec"><h3>&#127942; Top 5 Properties by ROI</h3><div id="top5"></div></div>
+      <div class="rsec"><h3>&#128577; Bottom 5 Properties by ROI</h3><div id="bot5"></div></div>
+    </div>
+    <div class="chart-sec"><h3>Top 10 Properties &#8212; ROI Comparison</h3><div class="chart-box"><canvas id="chartTop"></canvas></div></div>
+    <div class="chart-sec"><h3>Color Set Comparison &#8212; Average ROI</h3><div class="chart-box"><canvas id="chartColor"></canvas></div></div>
+    <div class="chart-sec">
+      <h3>&#128176; Player Cash Over Time</h3>
+      <div id="money-scoreboard"></div>
+      <div class="chart-box" style="height:260px"><canvas id="chartMoney"></canvas></div>
+    </div>
+  </div>
+  </div><!-- /sim-view -->
+
+  <!-- PROPERTY LIST VIEW -->
+  <div id="proplist-view" style="display:none">
+    <h2>&#127968; Property Reference Guide</h2>
+    <div id="proplist-hint">All purchasable properties — run a simulation to see live ROI scores and ratings.</div>
+
+    <!-- Filter chips -->
+    <div id="prop-filters">
+      <span class="fchip fc-all active" data-filter="all">All</span>
+      <span class="fchip" data-filter="brown"    style="border-color:#8B4513;color:#d4a07a">&#9632; Brown</span>
+      <span class="fchip" data-filter="lightblue"style="border-color:#87CEEB;color:#87CEEB">&#9632; Lt. Blue</span>
+      <span class="fchip" data-filter="pink"     style="border-color:#D93A96;color:#f088c8">&#9632; Pink</span>
+      <span class="fchip" data-filter="orange"   style="border-color:#F7941D;color:#fba857">&#9632; Orange</span>
+      <span class="fchip" data-filter="red"      style="border-color:#ED1B24;color:#f87070">&#9632; Red</span>
+      <span class="fchip" data-filter="yellow"   style="border-color:#d4b800;color:#ffd700">&#9632; Yellow</span>
+      <span class="fchip" data-filter="green"    style="border-color:#1FB25A;color:#69d494">&#9632; Green</span>
+      <span class="fchip" data-filter="darkblue" style="border-color:#0072BB;color:#69b4e8">&#9632; Dark Blue</span>
+      <span class="fchip" data-filter="railroad" style="border-color:#aaa;color:#ccc">&#9642; Railroads</span>
+      <span class="fchip" data-filter="utility"  style="border-color:#90a4ae;color:#b0bec5">&#9642; Utilities</span>
+    </div>
+
+    <!-- Groups injected by JS -->
+    <div id="proplist-groups"></div>
+    <div style="text-align:center;font-size:.67rem;color:#666;margin-top:10px">
+      * Buy-in = purchase price + 1 house &nbsp;|&nbsp; ROI = (landings × 1-house rent) ÷ buy-in &nbsp;|&nbsp; Ratings are relative to other properties in the same simulation
+    </div>
+  </div>
+
+  <!-- HOUSE ROI BREAKDOWN VIEW -->
+  <div id="breakdown-view" style="display:none">
+    <h2>&#127968; House ROI Breakdown — Level by Level</h2>
+    <div id="bd-hint">Run a simulation on the Board tab to populate ROI scores. Rent values are always shown.</div>
+
+    <div id="bd-sort-bar">
+      <label for="bd-sort">Sort by:</label>
+      <select id="bd-sort" onchange="buildBreakdown()">
+        <option value="color">Color Group</option>
+        <option value="roi0">Base ROI</option>
+        <option value="roi1">1-House ROI</option>
+        <option value="roi2">2-House ROI</option>
+        <option value="roi3">3-House ROI</option>
+        <option value="roi4">4-House ROI</option>
+        <option value="roi5">Hotel ROI</option>
+        <option value="lands">Landings</option>
+      </select>
+    </div>
+
+    <div id="bd-table-wrap">
+      <table class="bdtable" id="bd-table">
+        <thead>
+          <tr>
+            <th class="col-prop">Property</th>
+            <th>Lands</th>
+            <th>Base<br><span style="font-weight:normal;color:#aaa">No houses</span></th>
+            <th>1 House</th>
+            <th>2 Houses</th>
+            <th>3 Houses</th>
+            <th>4 Houses</th>
+            <th>&#127970; Hotel</th>
+            <th>Best<br><span style="font-weight:normal;color:#aaa">Level</span></th>
+          </tr>
+        </thead>
+        <tbody id="bd-tbody"></tbody>
+      </table>
+    </div>
+
+    <div class="bd-legend">
+      <span>ROI color scale:</span>
+      <div class="bd-legend-bar">
+        <div class="bd-legend-seg" style="background:#c62828"></div>
+        <div class="bd-legend-seg" style="background:#ef6c00"></div>
+        <div class="bd-legend-seg" style="background:#f9a825"></div>
+        <div class="bd-legend-seg" style="background:#558b2f"></div>
+        <div class="bd-legend-seg" style="background:#1b5e20"></div>
+      </div>
+      <span>Low → High &nbsp;|&nbsp; &#9733; = best level for that property &nbsp;|&nbsp; ROI = (landings × rent) ÷ total investment</span>
+    </div>
+  </div>
+
+</div><!-- /app -->
+
+<div id="banner"></div>
+
+<script>
+// ================================================================
+// DATA — all 40 board spaces
+// ================================================================
+const SPACES = [
+  {id:0,  name:"GO",                  short:"GO",         type:"corner"},
+  {id:1,  name:"Mediterranean Ave",   short:"MED AVE",    type:"property", color:"brown",    price:60,  rent:[2,10,30,90,160,250],     hc:50},
+  {id:2,  name:"Community Chest",     short:"COM CHEST",  type:"chest"},
+  {id:3,  name:"Baltic Ave",          short:"BALTIC AVE", type:"property", color:"brown",    price:60,  rent:[4,20,60,180,320,450],    hc:50},
+  {id:4,  name:"Income Tax",          short:"INCOME TAX", type:"tax"},
+  {id:5,  name:"Reading Railroad",    short:"READING RR", type:"railroad", color:"railroad", price:200, rent:[25,25,25,25,25,25],      hc:0},
+  {id:6,  name:"Oriental Ave",        short:"ORIENTAL",   type:"property", color:"lightblue",price:100, rent:[6,30,90,270,400,550],    hc:50},
+  {id:7,  name:"Chance",              short:"CHANCE",     type:"chance"},
+  {id:8,  name:"Vermont Ave",         short:"VERMONT",    type:"property", color:"lightblue",price:100, rent:[6,30,90,270,400,550],    hc:50},
+  {id:9,  name:"Connecticut Ave",     short:"CONNECTICUT",type:"property", color:"lightblue",price:120, rent:[8,40,100,300,450,600],   hc:50},
+  {id:10, name:"Jail / Just Visiting",short:"JAIL",       type:"corner"},
+  {id:11, name:"St. Charles Place",   short:"ST CHARLES", type:"property", color:"pink",     price:140, rent:[10,50,150,450,625,750],  hc:100},
+  {id:12, name:"Electric Company",    short:"ELECTRIC CO",type:"utility",  color:"utility",  price:150, rent:[8,8,8,8,8,8],            hc:0},
+  {id:13, name:"States Ave",          short:"STATES AVE", type:"property", color:"pink",     price:140, rent:[10,50,150,450,625,750],  hc:100},
+  {id:14, name:"Virginia Ave",        short:"VIRGINIA",   type:"property", color:"pink",     price:160, rent:[12,60,180,500,700,900],  hc:100},
+  {id:15, name:"Pennsylvania RR",     short:"PENN RR",    type:"railroad", color:"railroad", price:200, rent:[25,25,25,25,25,25],      hc:0},
+  {id:16, name:"St. James Place",     short:"ST JAMES",   type:"property", color:"orange",   price:180, rent:[14,70,200,550,750,950],  hc:100},
+  {id:17, name:"Community Chest",     short:"COM CHEST",  type:"chest"},
+  {id:18, name:"Tennessee Ave",       short:"TENNESSEE",  type:"property", color:"orange",   price:180, rent:[14,70,200,550,750,950],  hc:100},
+  {id:19, name:"New York Ave",        short:"NEW YORK",   type:"property", color:"orange",   price:200, rent:[16,80,220,600,800,1000], hc:100},
+  {id:20, name:"Free Parking",        short:"FREE PARK",  type:"corner"},
+  {id:21, name:"Kentucky Ave",        short:"KENTUCKY",   type:"property", color:"red",      price:220, rent:[18,90,250,700,875,1050], hc:150},
+  {id:22, name:"Chance",              short:"CHANCE",     type:"chance"},
+  {id:23, name:"Indiana Ave",         short:"INDIANA",    type:"property", color:"red",      price:220, rent:[18,90,250,700,875,1050], hc:150},
+  {id:24, name:"Illinois Ave",        short:"ILLINOIS",   type:"property", color:"red",      price:240, rent:[20,100,300,750,925,1100],hc:150},
+  {id:25, name:"B&O Railroad",        short:"B&O RR",     type:"railroad", color:"railroad", price:200, rent:[25,25,25,25,25,25],      hc:0},
+  {id:26, name:"Atlantic Ave",        short:"ATLANTIC",   type:"property", color:"yellow",   price:260, rent:[22,110,330,800,975,1150],hc:150},
+  {id:27, name:"Ventnor Ave",         short:"VENTNOR",    type:"property", color:"yellow",   price:260, rent:[22,110,330,800,975,1150],hc:150},
+  {id:28, name:"Water Works",         short:"WATER WKS",  type:"utility",  color:"utility",  price:150, rent:[8,8,8,8,8,8],            hc:0},
+  {id:29, name:"Marvin Gardens",      short:"MARVIN",     type:"property", color:"yellow",   price:280, rent:[24,120,360,850,1025,1200],hc:150},
+  {id:30, name:"Go to Jail",          short:"GO TO JAIL", type:"corner"},
+  {id:31, name:"Pacific Ave",         short:"PACIFIC",    type:"property", color:"green",    price:300, rent:[26,130,390,900,1100,1275],hc:200},
+  {id:32, name:"North Carolina Ave",  short:"N CAROLINA", type:"property", color:"green",    price:300, rent:[26,130,390,900,1100,1275],hc:200},
+  {id:33, name:"Community Chest",     short:"COM CHEST",  type:"chest"},
+  {id:34, name:"Pennsylvania Ave",    short:"PENN AVE",   type:"property", color:"green",    price:320, rent:[28,150,450,1000,1200,1400],hc:200},
+  {id:35, name:"Short Line RR",       short:"SHORT LINE", type:"railroad", color:"railroad", price:200, rent:[25,25,25,25,25,25],      hc:0},
+  {id:36, name:"Chance",              short:"CHANCE",     type:"chance"},
+  {id:37, name:"Park Place",          short:"PARK PLACE", type:"property", color:"darkblue", price:350, rent:[35,175,500,1100,1300,1500],hc:200},
+  {id:38, name:"Luxury Tax",          short:"LUXURY TAX", type:"tax"},
+  {id:39, name:"Boardwalk",           short:"BOARDWALK",  type:"property", color:"darkblue", price:400, rent:[50,200,600,1400,1700,2000],hc:200},
+];
+
+// Color display config
+const CDISP = {
+  brown:    {label:"Brown",     hex:"#8B4513"},
+  lightblue:{label:"Lt. Blue",  hex:"#87CEEB"},
+  pink:     {label:"Pink",      hex:"#D93A96"},
+  orange:   {label:"Orange",    hex:"#F7941D"},
+  red:      {label:"Red",       hex:"#ED1B24"},
+  yellow:   {label:"Yellow",    hex:"#e8d000"},
+  green:    {label:"Green",     hex:"#1FB25A"},
+  darkblue: {label:"Dark Blue", hex:"#0072BB"},
+  railroad: {label:"Railroads", hex:"#444"},
+  utility:  {label:"Utilities", hex:"#90a4ae"},
+};
+
+const PCOLORS = ["#e53935","#1e88e5","#43a047","#fdd835"];
+const PNAMES  = ["Red","Blue","Green","Yellow"];
+
+// Color group map: color key → array of space ids (used for monopoly detection)
+const COLOR_GROUP_MAP = {
+  brown:    [1,3],
+  lightblue:[6,8,9],
+  pink:     [11,13,14],
+  orange:   [16,18,19],
+  red:      [21,23,24],
+  yellow:   [26,27,29],
+  green:    [31,32,34],
+  darkblue: [37,39],
+};
+const NUM_TURNS = 200; // extended game length
+
+// ================================================================
+// BOARD POSITION MATH
+// ================================================================
+// Board grid is 11x11 (CSS grid, 1-indexed)
+// Corners = 70px, sides = 56px
+// Total board: 70 + 9*56 + 70 = 644px
+
+const CS = 70;  // corner size px
+const SS = 56;  // side size px
+// Actual total: CS + 9*SS + CS = 644
+// But grid-template defines: 70px repeat(9,56px) 70px => 654px wait let me check
+// 70 + 9*56 + 70 = 644, but I declared 654 in CSS — let me reconcile.
+// Actually in the CSS I wrote 654px for width/height. Let me recalculate:
+// With 70 + repeat(9,56) + 70 = 70+504+70 = 644px. So board is 644px total.
+// I'll use 644 for calculations.
+const BOARD_PX = CS + 9*SS + CS; // 644
+
+function gridPos(id) {
+  // Returns {row, col} 1-indexed CSS grid coordinates
+  if (id <= 10) return {row:11,        col:11 - id};
+  if (id <= 19) return {row:21 - id,   col:1};
+  if (id <= 30) return {row:1,         col:id - 19};
+  /* 31-39 */   return {row:id - 29,   col:11};
+}
+
+function sideClass(id) {
+  const {row, col} = gridPos(id);
+  if ((row===11&&col===11)||(row===11&&col===1)||(row===1&&col===1)||(row===1&&col===11)) return "corner";
+  if (row===11) return "row-bottom";
+  if (col===1)  return "col-left";
+  if (row===1)  return "row-top";
+  if (col===11) return "col-right";
+  return "";
+}
+
+function spaceCenterPx(id) {
+  // Returns pixel center {x, y} relative to board-wrapper top-left
+  const {row, col} = gridPos(id);
+  function ctr(n) {
+    if (n===1)  return CS/2;                       // 35
+    if (n===11) return CS + 9*SS + CS/2;           // 609
+    return CS + (n-2)*SS + SS/2;
+  }
+  // +5 offset for board's 5px border on wrapper
+  return {x: ctr(col)+5, y: ctr(row)+5};
+}
+
+// ================================================================
+// BOARD RENDERING
+// ================================================================
+function renderBoard() {
+  const board = document.getElementById('board');
+  board.querySelectorAll('.space').forEach(e => e.remove());
+
+  for (let id = 0; id < 40; id++) {
+    const sp  = SPACES[id];
+    const {row, col} = gridPos(id);
+    const sc  = sideClass(id);
+    const isCorner = sc === "corner";
+
+    const el  = document.createElement('div');
+    el.className = `space ${sc}`;
+    el.id = `sp${id}`;
+    el.style.gridRow = row;
+    el.style.gridColumn = col;
+    el.title = sp.name + (sp.price ? ` · $${sp.price}` : '');
+
+    // Color band
+    if (!isCorner && sp.color) {
+      const band = document.createElement('div');
+      band.className = `color-band cb-${sp.color}`;
+      el.appendChild(band);
+    }
+
+    // Inner content
+    const inner = document.createElement('div');
+    inner.className = 'space-inner';
+
+    // Icon
+    const icon = spaceIcon(sp);
+    if (icon) {
+      const ico = document.createElement('div');
+      ico.className = 'sicon'; ico.textContent = icon;
+      inner.appendChild(ico);
+    }
+
+    // Name
+    const nm = document.createElement('div');
+    nm.className = 'sname';
+    nm.textContent = isCorner ? cornerLabel(sp) : sp.short;
+    inner.appendChild(nm);
+
+    // Price
+    if (sp.price && !isCorner) {
+      const pr = document.createElement('div');
+      pr.className = 'sprice'; pr.textContent = `$${sp.price}`;
+      inner.appendChild(pr);
+    }
+
+    el.appendChild(inner);
+
+    // Landing badge (shown after sim)
+    const badge = document.createElement('div');
+    badge.className = 'landing-badge';
+    badge.id = `badge${id}`;
+    el.appendChild(badge);
+
+    // House/hotel indicator (updated live during animation)
+    if (sp.type==='property') {
+      const hind = document.createElement('div');
+      hind.className = 'house-ind';
+      hind.id = `hind${id}`;
+      el.appendChild(hind);
+    }
+
+    board.appendChild(el);
+  }
+}
+
+function spaceIcon(sp) {
+  const icons = {
+    railroad:'🚂', utility: sp.id===12 ? '⚡' : '🚿',
+    chance:'?', chest:'📦', tax:'💰',
+  };
+  if (icons[sp.type]) return icons[sp.type];
+  if (sp.id===0)  return '➡';
+  if (sp.id===10) return '👮';
+  if (sp.id===20) return '🅿';
+  if (sp.id===30) return '🚔';
+  return null;
+}
+function cornerLabel(sp) {
+  return ['GO','JAIL','FREE PARK','GO TO JAIL',''][
+    [0,10,20,30].indexOf(sp.id) >= 0 ? [0,10,20,30].indexOf(sp.id) : 4
+  ];
+}
+
+// ================================================================
+// TOKEN POSITIONING
+// ================================================================
+const TOKEN_OFF = {
+  1: [[0,0]],
+  2: [[-7,0],[7,0]],
+  3: [[-6,-5],[6,-5],[0,5]],
+  4: [[-6,-6],[6,-6],[-6,6],[6,6]],
+};
+
+function positionTokens(positions, n) {
+  // Group by space
+  const bySpace = {};
+  for (let p=0; p<n; p++) {
+    const s = positions[p];
+    if (!bySpace[s]) bySpace[s]=[];
+    bySpace[s].push(p);
+  }
+  const half = 13/2;
+  for (let p=0; p<4; p++) {
+    const tok = document.getElementById(`tok${p}`);
+    if (p >= n) { tok.style.display='none'; continue; }
+    tok.style.display='block';
+    const s = positions[p];
+    const c = spaceCenterPx(s);
+    const here = bySpace[s];
+    const slot = here.indexOf(p);
+    const total = Math.min(here.length, 4);
+    const [dx,dy] = TOKEN_OFF[total][slot] || [0,0];
+    tok.style.left = (c.x + dx - half) + 'px';
+    tok.style.top  = (c.y + dy - half) + 'px';
+  }
+}
+
+// ================================================================
+// CARD DECKS
+// ================================================================
+// Chance: 9 movement effects + 7 no-ops
+const CHANCE_EFFECTS = [
+  "go","illinois","stcharles","nearrr","nearrr","nearutil","back3","jail","reading","boardwalk",
+  "none","none","none","none","none","none","none"
+];
+// Community Chest: 2 movement + 14 no-ops
+const CHEST_EFFECTS = [
+  "go","jail",
+  ...Array(14).fill("none")
+];
+
+function drawChance(pos) {
+  const eff = CHANCE_EFFECTS[Math.floor(Math.random()*CHANCE_EFFECTS.length)];
+  let to = pos, desc = 'Chance: no effect';
+  switch (eff) {
+    case "go":        to=0;  desc='Chance → Advance to GO'; break;
+    case "illinois":  to=24; desc='Chance → Illinois Ave'; break;
+    case "stcharles": to=11; desc='Chance → St. Charles'; break;
+    case "nearrr":    to=nearRR(pos); desc=`Chance → Nearest RR (${SPACES[to].short})`; break;
+    case "nearutil":  to=nearUtil(pos); desc='Chance → Nearest Utility'; break;
+    case "back3":     to=(pos-3+40)%40; desc=`Chance → Back 3 to ${SPACES[to].short}`; break;
+    case "jail":      to=10; desc='Chance → Go to Jail!'; break;
+    case "reading":   to=5;  desc='Chance → Reading RR'; break;
+    case "boardwalk": to=39; desc='Chance → Boardwalk'; break;
+  }
+  return {to, desc};
+}
+
+function drawChest(pos) {
+  const eff = CHEST_EFFECTS[Math.floor(Math.random()*CHEST_EFFECTS.length)];
+  let to = pos, desc = 'Community Chest: no effect';
+  if (eff==="go")   { to=0;  desc='Chest → Advance to GO'; }
+  if (eff==="jail") { to=10; desc='Chest → Go to Jail!'; }
+  return {to, desc};
+}
+
+function nearRR(pos) {
+  if (pos<5||pos>=35) return 5;
+  if (pos<15) return 15;
+  if (pos<25) return 25;
+  return 35;
+}
+function nearUtil(pos) {
+  return (pos<12||pos>=28) ? 12 : 28;
+}
+
+// ================================================================
+// SIMULATION ENGINE — with house-building AI
+// ================================================================
+// Each player starts with $1500 and tries to buy/build optimally.
+// Building rule: buy if (cash - price) >= 200; build a house if
+// (cash - houseCost) >= 200 and the player has a complete monopoly.
+// Houses must be built evenly across a color group (real Monopoly rule).
+// Returns { frames[], counts{}, roiCounts{}, finalHouses{}, finalOwner{} }
+//
+// counts{}    — total visits to each space (used for landing-frequency badges)
+// roiCounts{} — visits where rent was actually paid to an owner (used for all
+//               ROI formulas). Self-landings on owned properties are excluded
+//               because the owner collects no rent from themselves.
+
+const STARTING_CASH = 1500;
+const CASH_BUFFER   = 200;  // minimum cash to keep before buying/building
+
+function runSim(numPlayers, turns) {
+  const frames    = [];
+  const positions = new Array(numPlayers).fill(0);
+  const cash      = new Array(numPlayers).fill(STARTING_CASH);
+  const bankrupt  = new Array(numPlayers).fill(false);
+
+  // counts:        total visits (for board badge display)
+  // roiCounts:     rent-paying landings (non-owner landings on owned property)
+  // rentCollected: actual dollar rent paid to the owner per property
+  const counts        = {};
+  const roiCounts     = {};
+  const rentCollected = {};
+  for (let i=0;i<40;i++) { counts[i]=0; roiCounts[i]=0; rentCollected[i]=0; }
+
+  // Helpers for dynamic rent rules
+  const RR_IDS   = [5, 15, 25, 35];
+  const UTIL_IDS = [12, 28];
+  const AVG_DICE = 7; // expected value of 2d6
+
+  function rrRent(ownerIdx) {
+    // $25 × 2^(count-1): 25, 50, 100, 200
+    const n = RR_IDS.filter(id => propOwner[id] === ownerIdx).length;
+    return 25 * Math.pow(2, n - 1);
+  }
+  function utilRent(ownerIdx, diceTotal) {
+    const n = UTIL_IDS.filter(id => propOwner[id] === ownerIdx).length;
+    return diceTotal * (n === 2 ? 10 : 4);
+  }
+
+  // Property ownership: spaceId → playerIndex (undefined = unowned)
+  const propOwner = {};
+  // House count per property: spaceId → 0–5 (0=no house, 5=hotel)
+  const houses    = {};
+
+  // Try to build houses for a player after their turn ends.
+  // Returns array of {id, count} for any changes made (for animation events).
+  function tryBuild(p) {
+    const changes = [];
+    let improved = true;
+    while (improved) {
+      improved = false;
+      for (const [colorKey, ids] of Object.entries(COLOR_GROUP_MAP)) {
+        if (!ids.every(id => propOwner[id] === p)) continue;
+        const minH = Math.min(...ids.map(id => houses[id] || 0));
+        if (minH >= 5) continue;
+        for (const id of ids) {
+          if ((houses[id] || 0) !== minH) continue;
+          const sp = SPACES[id];
+          if (cash[p] - sp.hc >= CASH_BUFFER) {
+            cash[p] -= sp.hc;
+            houses[id] = (houses[id] || 0) + 1;
+            changes.push({ id, count: houses[id] });
+            improved = true;
+          }
+        }
+      }
+    }
+    return changes;
+  }
+
+  for (let turn=0; turn<turns; turn++) {
+    for (let p=0; p<numPlayers; p++) {
+      if (bankrupt[p]) continue;
+      const from = positions[p];
+      const d1   = Math.ceil(Math.random()*6);
+      const d2   = Math.ceil(Math.random()*6);
+      let pos    = (from + d1 + d2) % 40;
+      const passedGo = (from + d1 + d2) >= 40;
+      const events       = [];
+      const ownerChanges = [];
+
+      if (passedGo) { cash[p] += 200; }
+      if (passedGo || pos===0) events.push({type:'go', desc: pos===0 ? 'Landed on GO!' : 'Passed GO'});
+
+      // Chance card
+      if (pos===7||pos===22||pos===36) {
+        const {to, desc} = drawChance(pos);
+        if (to!==pos) { pos=to; events.push({type:'chance', desc}); }
+        else           events.push({type:'chance', desc});
+      }
+      // Community Chest
+      else if (pos===2||pos===17||pos===33) {
+        const {to, desc} = drawChest(pos);
+        if (to!==pos) { pos=to; events.push({type:'chest', desc}); }
+        else           events.push({type:'chest', desc});
+      }
+
+      // Go To Jail space
+      if (pos===30) { pos=10; events.push({type:'jail', desc:'🚔 Go to Jail!'}); }
+
+      // Taxes
+      if (pos===4)  cash[p] = Math.max(0, cash[p]-200);
+      if (pos===38) cash[p] = Math.max(0, cash[p]-100);
+
+      // ---- Property logic ----
+      const sp = SPACES[pos];
+      if (sp.type==='property' || sp.type==='railroad' || sp.type==='utility') {
+        if (propOwner[pos] === undefined) {
+          // Unowned — attempt to purchase
+          if (cash[p] - sp.price >= CASH_BUFFER) {
+            cash[p] -= sp.price;
+            propOwner[pos] = p;
+            houses[pos] = 0;
+            ownerChanges.push({id: pos, player: p});
+            events.push({type:'buy', desc:`${PNAMES[p]} bought ${sp.short} ($${sp.price})`});
+          }
+          // Note: landing on an unowned property is NOT counted in roiCounts
+          // because no rent changes hands — the buyer pays purchase price, not rent.
+
+        } else if (propOwner[pos] !== p) {
+          // Owned by a different player — compute rent based on property type.
+          let rentDue;
+          let rentLabel;
+          if (sp.type === 'railroad') {
+            rentDue   = rrRent(propOwner[pos]);
+            const rrN = RR_IDS.filter(id => propOwner[id] === propOwner[pos]).length;
+            rentLabel = `$${rentDue} RR rent (${rrN} owned)`;
+          } else if (sp.type === 'utility') {
+            rentDue   = utilRent(propOwner[pos], d1 + d2);
+            const uN  = UTIL_IDS.filter(id => propOwner[id] === propOwner[pos]).length;
+            rentLabel = `$${rentDue} utility rent (${uN} owned, rolled ${d1+d2})`;
+          } else {
+            const hLevel = houses[pos] || 0;
+            rentDue   = sp.rent[hLevel];
+            rentLabel = hLevel > 0
+              ? `$${rentDue} rent (${hLevel===5?'hotel':`${hLevel}H`}) on ${sp.short}`
+              : `$${rentDue} base rent on ${sp.short}`;
+          }
+
+          const paid = Math.min(rentDue, Math.max(0, cash[p]));
+          cash[p]              -= paid;
+          cash[propOwner[pos]] += paid;
+
+          // Track this landing and actual rent for ROI calculations
+          roiCounts[pos]++;
+          rentCollected[pos] += paid;
+
+          if (paid > 0) {
+            if (sp.type==='railroad'||sp.type==='utility') {
+              events.push({type:'rr', desc:rentLabel});
+            } else {
+              events.push({type:'rent', desc:rentLabel});
+            }
+          }
+
+          // Bankruptcy: player can't pay and hits $0 — return all their properties
+          if (cash[p] <= 0) {
+            bankrupt[p] = true;
+            cash[p] = 0;
+            Object.keys(propOwner).forEach(id => {
+              if (propOwner[id] === p) {
+                ownerChanges.push({id: parseInt(id), player: -1});
+                delete propOwner[id];
+                delete houses[id];
+              }
+            });
+            events.push({type:'bankrupt', desc:`💀 ${PNAMES[p]} is bankrupt! Properties returned.`});
+          }
+        }
+        // If propOwner[pos] === p: owner on own property — no rent, excluded from roiCounts.
+      }
+
+      // Highlight notable spaces for the event log
+      if ((sp.type==='railroad'||sp.type==='utility') && !events.find(e=>e.type==='rr')) {
+        events.push({type:'rr', desc:`Landed on ${sp.short}`});
+      }
+      if (sp.type==='property' && sp.rent && sp.rent[1]>100
+          && propOwner[pos]!==undefined && propOwner[pos]!==p
+          && !events.find(e=>e.type==='rent')) {
+        events.push({type:'rent', desc:`High-rent: ${sp.short}`});
+      }
+
+      // Try to build houses (skip if just went bankrupt)
+      const houseChanges = bankrupt[p] ? [] : tryBuild(p);
+      if (houseChanges.length > 0) {
+        houseChanges.forEach(({id, count}) => {
+          const label = count===5 ? '🏨 Hotel' : `🏠 ${count} House${count>1?'s':''}`;
+          events.push({type:'house', desc:`${PNAMES[p]} built ${label} on ${SPACES[id].short}`});
+        });
+      }
+
+      // Always track total visits (owner self-landings included, for badge display)
+      counts[pos]++;
+      positions[p] = pos;
+      frames.push({
+        turn: turn+1, player: p, d1, d2, to: pos, events,
+        playerPositions: [...positions],
+        houseChanges,
+        ownerChanges,
+        cashSnapshot: [...cash],
+        bankruptSnapshot: [...bankrupt],
+      });
+    }
+  }
+
+  return { frames, counts, roiCounts, rentCollected, finalHouses:{...houses}, finalOwner:{...propOwner} };
+}
+
+// ================================================================
+// ROI CALCULATION
+// ================================================================
+// Properties:  ROI = (roiCounts × rent_at_1_house) / (price + houseCost)
+// Railroads:   ROI = rentCollected / price  (actual earned rent from sim;
+//              reflects ownership synergy as it played out)
+// Utilities:   ROI = rentCollected / price  (actual earned rent from sim;
+//              reflects 4× or 10× dice-roll multiplier as it played out)
+
+const AVG_DICE_GLOBAL = 7; // expected value of 2d6, used for pre-sim estimates
+
+function calcROI(roiCounts, rentCollected) {
+  const res = [];
+  for (const sp of SPACES) {
+    if (sp.type!=='property'&&sp.type!=='railroad'&&sp.type!=='utility') continue;
+
+    const lands = roiCounts ? (roiCounts[sp.id]||0) : 0;
+    let roi, rent1Label, investLabel;
+
+    if (sp.type === 'railroad') {
+      // Use actual rent collected if we have sim data; otherwise estimate at 2-RR level
+      if (rentCollected) {
+        roi = sp.price > 0 ? Math.round(rentCollected[sp.id] / sp.price * 1000) / 1000 : 0;
+        rent1Label = `$${rentCollected[sp.id]} earned`;
+      } else {
+        roi = Math.round(lands * 50 / sp.price * 1000) / 1000; // 2-RR estimate
+        rent1Label = '$50 est.';
+      }
+      investLabel = `$${sp.price}`;
+
+    } else if (sp.type === 'utility') {
+      if (rentCollected) {
+        roi = sp.price > 0 ? Math.round(rentCollected[sp.id] / sp.price * 1000) / 1000 : 0;
+        rent1Label = `$${rentCollected[sp.id]} earned`;
+      } else {
+        roi = Math.round(lands * 4 * AVG_DICE_GLOBAL / sp.price * 1000) / 1000; // 1-util estimate
+        rent1Label = `$${4*AVG_DICE_GLOBAL} est.`;
+      }
+      investLabel = `$${sp.price}`;
+
+    } else {
+      // Standard property
+      const r1  = sp.rent[1];
+      const inv = sp.price + (sp.hc||0);
+      roi = inv > 0 ? Math.round(lands * r1 / inv * 1000) / 1000 : 0;
+      rent1Label  = `$${r1}`;
+      investLabel = `$${inv}`;
+    }
+
+    res.push({
+      id: sp.id, name: sp.name, short: sp.short, color: sp.color,
+      landings: lands, price: sp.price,
+      rent1: rent1Label, investment: investLabel, roi,
+    });
+  }
+  res.sort((a,b)=>b.roi-a.roi);
+  return res;
+}
+
+function calcColorROI(roiList) {
+  const groups = {};
+  for (const r of roiList) {
+    if (!r.color||r.color==='railroad'||r.color==='utility') continue;
+    if (!groups[r.color]) groups[r.color]={sum:0,n:0};
+    groups[r.color].sum+=r.roi; groups[r.color].n++;
+  }
+  return Object.entries(groups).map(([c,{sum,n}])=>({color:c, avg:Math.round(sum/n*1000)/1000})).sort((a,b)=>b.avg-a.avg);
+}
+
+// ================================================================
+// STATE
+// ================================================================
+let gSim=null, gFrameIdx=0, gNumPlayers=2, gRunning=false, gTimer=null;
+let chartTop=null, chartColor=null, chartMoney=null;
+
+const SPEEDS = [350,200,120,55,15]; // ms per frame, index 0=slowest
+
+function getSpeed() {
+  return SPEEDS[parseInt(document.getElementById('speedSlider').value)-1];
+}
+
+// ================================================================
+// ANIMATION
+// ================================================================
+// Live house state maintained during animation
+const liveHouses = {};
+const liveOwner  = {}; // spaceId → playerIndex, updated frame by frame
+
+function initBalanceRows(n) {
+  const container = document.getElementById('balance-rows');
+  container.innerHTML = '';
+  for (let p = 0; p < n; p++) {
+    const row = document.createElement('div');
+    row.className = 'bal-row';
+    row.id = `bal-row-${p}`;
+    row.innerHTML = `
+      <div class="bal-top">
+        <div class="bal-dot" style="background:${PCOLORS[p]}"></div>
+        <span class="bal-name">${PNAMES[p]}</span>
+        <span class="bal-amt" id="bal-amt-${p}">$1,500</span>
+      </div>
+      <div class="bal-track">
+        <div class="bal-fill" id="bal-fill-${p}" style="width:100%;background:${PCOLORS[p]}"></div>
+      </div>
+      <div class="bal-props" id="bal-props-${p}"></div>`;
+    container.appendChild(row);
+  }
+}
+
+function updateBalances(cashSnapshot, bankruptSnapshot, activePlayer, n) {
+  const max = Math.max(...cashSnapshot.slice(0, n), 1);
+  for (let p = 0; p < n; p++) {
+    const amt  = cashSnapshot[p];
+    const bust = bankruptSnapshot && bankruptSnapshot[p];
+    const pct  = bust ? 0 : Math.max(0, amt / max * 100).toFixed(1);
+    const amtEl = document.getElementById(`bal-amt-${p}`);
+    if (amtEl) amtEl.textContent = bust ? 'BANKRUPT' : '$' + Math.max(0, amt).toLocaleString();
+    const fillEl = document.getElementById(`bal-fill-${p}`);
+    if (fillEl) fillEl.style.width = pct + '%';
+    const row = document.getElementById(`bal-row-${p}`);
+    if (!row) continue;
+    row.classList.remove('active-player', 'alive', 'bankrupt');
+    if (bust)                row.classList.add('bankrupt');
+    else if (p === activePlayer) row.classList.add('active-player');
+    else if (amt > 0)        row.classList.add('alive');
+  }
+}
+
+const PROP_CHIP_COLOR = {
+  brown:'#8B4513', lightblue:'#87CEEB', pink:'#D93A96', orange:'#F7941D',
+  red:'#ED1B24', yellow:'#d4b800', green:'#1FB25A', darkblue:'#0072BB',
+  railroad:'#888', utility:'#90a4ae',
+};
+
+function updatePropertyChips(n) {
+  // Group owned spaces by player
+  const byPlayer = Array.from({length: n}, () => []);
+  Object.entries(liveOwner).forEach(([id, player]) => {
+    if (player < n) byPlayer[player].push(parseInt(id));
+  });
+
+  for (let p = 0; p < n; p++) {
+    const container = document.getElementById(`bal-props-${p}`);
+    if (!container) continue;
+    // Sort by space ID so chips appear in board order
+    const ids = byPlayer[p].sort((a, b) => a - b);
+    container.innerHTML = ids.map(id => {
+      const sp = SPACES[id];
+      const colorKey = sp.type === 'railroad' ? 'railroad'
+                     : sp.type === 'utility'  ? 'utility'
+                     : sp.color;
+      const hex = PROP_CHIP_COLOR[colorKey] || '#888';
+      const cls = sp.type === 'railroad' ? 'prop-chip railroad'
+                : sp.type === 'utility'  ? 'prop-chip utility'
+                : 'prop-chip';
+      return `<div class="${cls}" style="background:${hex}" title="${sp.name}"></div>`;
+    }).join('');
+  }
+}
+
+function startAnim(n) {
+  if (gRunning) return;
+  gRunning=true; gNumPlayers=n;
+  positionTokens(new Array(n).fill(0), n);
+  clearHouseDisplay();
+  Object.keys(liveHouses).forEach(k=>delete liveHouses[k]);
+  Object.keys(liveOwner).forEach(k=>delete liveOwner[k]);
+  gSim = runSim(n, NUM_TURNS);
+  gFrameIdx=0;
+  clearLog();
+  initBalanceRows(n);
+  updateBalances(new Array(n).fill(STARTING_CASH), null, 0, n);
+  document.getElementById('runBtn').disabled=true;
+  gTimer = setInterval(tick, getSpeed());
+}
+
+function tick() {
+  if (gFrameIdx >= gSim.frames.length) { stopAnim(); showResults(); return; }
+  const fr = gSim.frames[gFrameIdx++];
+  positionTokens(fr.playerPositions, gNumPlayers);
+  updateInfo(fr);
+  handleEvents(fr);
+  updateBalances(fr.cashSnapshot, fr.bankruptSnapshot, fr.player, gNumPlayers);
+  // Apply ownership changes (purchases and bankruptcies returning properties)
+  if (fr.ownerChanges && fr.ownerChanges.length > 0) {
+    fr.ownerChanges.forEach(({id, player}) => {
+      if (player === -1) delete liveOwner[id];
+      else liveOwner[id] = player;
+    });
+    updatePropertyChips(gNumPlayers);
+  }
+  // Update live house display for any houses built this turn
+  if (fr.houseChanges && fr.houseChanges.length > 0) {
+    fr.houseChanges.forEach(({id, count}) => { liveHouses[id] = count; });
+    updateHouseDisplay(liveHouses);
+  }
+}
+
+function stopAnim() {
+  if (gTimer) { clearInterval(gTimer); gTimer=null; }
+  gRunning=false;
+  document.getElementById('runBtn').disabled=false;
+}
+
+function skipToResults() {
+  stopAnim();
+  if (!gSim) {
+    gNumPlayers = parseInt(document.getElementById('numPlayers').value);
+    gSim = runSim(gNumPlayers, NUM_TURNS);
+    const last = gSim.frames[gSim.frames.length-1];
+    positionTokens(last.playerPositions, gNumPlayers);
+    updateInfo(last);
+    initBalanceRows(gNumPlayers);
+    // Replay all ownership changes to populate liveOwner
+    gSim.frames.forEach(f => f.ownerChanges.forEach(({id, player}) => {
+      if (player === -1) delete liveOwner[id]; else liveOwner[id] = player;
+    }));
+    updateBalances(last.cashSnapshot, last.bankruptSnapshot, last.player, gNumPlayers);
+    updatePropertyChips(gNumPlayers);
+  } else {
+    const last = gSim.frames[gSim.frames.length-1];
+    updateBalances(last.cashSnapshot, last.bankruptSnapshot, last.player, gNumPlayers);
+    updatePropertyChips(gNumPlayers);
+  }
+  showResults();
+}
+
+function resetAll() {
+  stopAnim();
+  gSim=null; gFrameIdx=0;
+  const n = parseInt(document.getElementById('numPlayers').value);
+  positionTokens(new Array(n).fill(0), n);
+  document.getElementById('turn-num').textContent='Turn 0';
+  document.getElementById('turn-sub').textContent=`of ${NUM_TURNS} per player`;
+  document.getElementById('d1').textContent='—';
+  document.getElementById('d2').textContent='—';
+  document.getElementById('dice-sum').textContent='';
+  document.getElementById('pdot').style.background='#555';
+  document.getElementById('pname').textContent='Ready';
+  clearLog();
+  document.getElementById('results').style.display='none';
+  // Clear landing badges and house indicators
+  document.querySelectorAll('.landing-badge').forEach(b=>{b.style.display='none';b.textContent='';});
+  clearHouseDisplay();
+  Object.keys(liveHouses).forEach(k=>delete liveHouses[k]);
+  Object.keys(liveOwner).forEach(k=>delete liveOwner[k]);
+  if (chartTop)   { chartTop.destroy();   chartTop=null; }
+  if (chartColor) { chartColor.destroy(); chartColor=null; }
+  if (chartMoney) { chartMoney.destroy(); chartMoney=null; }
+  document.getElementById('money-scoreboard').innerHTML='';
+  document.getElementById('balance-rows').innerHTML='';
+  document.getElementById('runBtn').disabled=false;
+}
+
+// ================================================================
+// INFO PANEL UPDATES
+// ================================================================
+function updateInfo(fr) {
+  document.getElementById('turn-num').textContent=`Turn ${fr.turn}`;
+  document.getElementById('d1').textContent=fr.d1;
+  document.getElementById('d2').textContent=fr.d2;
+  document.getElementById('dice-sum').textContent=`Total: ${fr.d1+fr.d2}`;
+  document.getElementById('pdot').style.background=PCOLORS[fr.player];
+  document.getElementById('pname').textContent=`Player ${PNAMES[fr.player]}`;
+}
+
+function clearLog() { document.getElementById('log-list').innerHTML=''; }
+
+function addLog(text, cls) {
+  const list = document.getElementById('log-list');
+  const li = document.createElement('li');
+  li.className=cls||''; li.textContent=text;
+  list.prepend(li);
+  while (list.children.length>25) list.removeChild(list.lastChild);
+}
+
+function handleEvents(fr) {
+  for (const ev of fr.events) {
+    const pLetter = PNAMES[fr.player][0];
+    if (ev.type==='jail') {
+      addLog(`${pLetter}: ${ev.desc}`, 'ev-jail');
+      flashSpace(10,'flash-jail');
+      showBanner('🚔 GO TO JAIL!','bj');
+    } else if (ev.type==='rent') {
+      addLog(`${pLetter}: ${ev.desc}`, 'ev-rent');
+      flashSpace(fr.to,'flash-rent');
+      showBanner(`💸 ${ev.desc}`,'br');
+    } else if (ev.type==='rr') {
+      addLog(`${pLetter}: ${ev.desc}`, 'ev-rr');
+      flashSpace(fr.to,'flash-rr');
+    } else if (ev.type==='go') {
+      addLog(`${pLetter}: ${ev.desc}`, 'ev-go');
+    } else if (ev.type==='buy') {
+      addLog(`${pLetter}: ${ev.desc}`, 'ev-go');   // green — good event
+    } else if (ev.type==='house') {
+      addLog(`${pLetter}: ${ev.desc}`, 'ev-rent');  // gold — house built
+    } else if (ev.type==='bankrupt') {
+      addLog(ev.desc, 'ev-bankrupt');
+      showBanner(ev.desc, 'br');
+    } else {
+      addLog(`${pLetter}: ${ev.desc}`, '');
+    }
+  }
+}
+
+function flashSpace(id, cls) {
+  const el = document.getElementById(`sp${id}`);
+  if (!el) return;
+  el.classList.add(cls);
+  setTimeout(()=>el.classList.remove(cls), 800);
+}
+
+let bannerTimer=null;
+function showBanner(txt, type) {
+  if (bannerTimer) clearTimeout(bannerTimer);
+  const b = document.getElementById('banner');
+  b.textContent=txt; b.className=`show ${type}`;
+  bannerTimer = setTimeout(()=>{ b.className=''; }, 1400);
+}
+
+// ================================================================
+// RESULTS DISPLAY
+// ================================================================
+function showResults() {
+  const roi = calcROI(gSim.roiCounts, gSim.rentCollected);
+  const colorRoi = calcColorROI(roi);
+  const top5 = roi.slice(0,5);
+  const bot5 = roi.slice(-5).reverse();
+
+  document.getElementById('res-sub').textContent =
+    `${gNumPlayers}-player game · ${NUM_TURNS} turns per player · ${gNumPlayers*NUM_TURNS} total turns simulated`;
+
+  renderCards('top5', top5, true);
+  renderCards('bot5', bot5, false);
+
+  // Show landing badges on board
+  for (let i=0;i<40;i++) {
+    const badge = document.getElementById(`badge${i}`);
+    if (!badge) continue;
+    const cnt = gSim.counts[i]||0;
+    if (cnt>0) { badge.textContent=cnt; badge.style.display='block'; }
+  }
+
+  document.getElementById('results').style.display='block';
+  // Show final house counts on board
+  if (gSim.finalHouses) updateHouseDisplay(gSim.finalHouses);
+  // Pre-build the property list and breakdown with fresh ROI
+  buildPropList(roi);
+  buildBreakdown();
+  setTimeout(()=>document.getElementById('results').scrollIntoView({behavior:'smooth'}), 100);
+
+  renderTopChart(roi.slice(0,10));
+  renderColorChart(colorRoi);
+  renderMoneyChart(gSim.frames, gNumPlayers);
+}
+
+function renderCards(containerId, items, isTop) {
+  const c = document.getElementById(containerId);
+  c.innerHTML='';
+  items.forEach((item, i) => {
+    const hex = item.color && CDISP[item.color] ? CDISP[item.color].hex : '#888';
+    const div = document.createElement('div');
+    div.className='prop-card';
+    div.style.borderLeftColor=hex;
+    div.title=`Landings: ${item.landings} | Rent: ${item.rent1} | Investment: ${item.investment}`;
+    div.innerHTML=`
+      <span class="pc-rank">${i+1}</span>
+      <span class="pc-name">${item.name}</span>
+      <div class="pc-stats">${item.landings} landings<br>${item.rent1} · ${item.investment} inv</div>
+      <span class="pc-roi">${item.roi.toFixed(3)}</span>
+    `;
+    c.appendChild(div);
+  });
+}
+
+// ================================================================
+// CHARTS
+// ================================================================
+const CHART_OPTS = {
+  responsive:true, maintainAspectRatio:false,
+  plugins:{legend:{display:false}},
+};
+
+function renderTopChart(items) {
+  if (chartTop) chartTop.destroy();
+  const ctx = document.getElementById('chartTop').getContext('2d');
+  chartTop = new Chart(ctx, {
+    type:'bar',
+    data:{
+      labels: items.map(r=>r.short),
+      datasets:[{
+        label:'ROI',
+        data: items.map(r=>r.roi),
+        backgroundColor: items.map(r=>r.color&&CDISP[r.color]?CDISP[r.color].hex:'#90a4ae'),
+        borderWidth:1, borderColor:'rgba(255,255,255,.3)'
+      }]
+    },
+    options:{
+      ...CHART_OPTS,
+      indexAxis:'y',
+      plugins:{
+        ...CHART_OPTS.plugins,
+        tooltip:{callbacks:{label:ctx=>{
+          const it=items[ctx.dataIndex];
+          return ` ROI: ${ctx.raw.toFixed(3)}  (${it.landings} landings)`;
+        }}}
+      },
+      scales:{
+        x:{ticks:{color:'#ccc'},grid:{color:'rgba(255,255,255,.08)'},title:{display:true,text:'ROI Score',color:'#ffd700'}},
+        y:{ticks:{color:'#fff',font:{size:10}},grid:{color:'rgba(255,255,255,.04)'}}
+      }
+    }
+  });
+}
+
+function renderColorChart(items) {
+  if (chartColor) chartColor.destroy();
+  const ctx = document.getElementById('chartColor').getContext('2d');
+  chartColor = new Chart(ctx, {
+    type:'bar',
+    data:{
+      labels: items.map(r=>CDISP[r.color]?CDISP[r.color].label:r.color),
+      datasets:[{
+        label:'Avg ROI',
+        data: items.map(r=>r.avg),
+        backgroundColor: items.map(r=>CDISP[r.color]?CDISP[r.color].hex:'#888'),
+        borderWidth:2, borderColor:'rgba(255,255,255,.4)'
+      }]
+    },
+    options:{
+      ...CHART_OPTS,
+      plugins:{
+        ...CHART_OPTS.plugins,
+        tooltip:{callbacks:{label:ctx=>` Avg ROI: ${ctx.raw.toFixed(3)}`}}
+      },
+      scales:{
+        x:{ticks:{color:'#fff',font:{size:11}},grid:{color:'rgba(255,255,255,.05)'}},
+        y:{ticks:{color:'#ccc'},grid:{color:'rgba(255,255,255,.08)'},title:{display:true,text:'Average ROI',color:'#ffd700'}}
+      }
+    }
+  });
+}
+
+function renderMoneyChart(frames, n) {
+  // Build per-player cash history (one data point per player-turn)
+  const playerTurns = Array.from({length: n}, () => [STARTING_CASH]);
+  frames.forEach(f => {
+    playerTurns[f.player].push(f.cashSnapshot[f.player]);
+  });
+
+  // X-axis labels: 0 = start, 1..NUM_TURNS = after each of that player's turns
+  const labels = Array.from({length: NUM_TURNS + 1}, (_, i) => i);
+
+  const datasets = Array.from({length: n}, (_, p) => ({
+    label: `${PNAMES[p]}`,
+    data: playerTurns[p],
+    borderColor: PCOLORS[p],
+    backgroundColor: PCOLORS[p] + '22',
+    borderWidth: 2,
+    pointRadius: 0,
+    fill: false,
+    tension: 0.2,
+  }));
+
+  // Final cash scoreboard
+  const sb = document.getElementById('money-scoreboard');
+  const sorted = Array.from({length: n}, (_, p) => ({
+    name: PNAMES[p], color: PCOLORS[p],
+    final: playerTurns[p][playerTurns[p].length - 1],
+    peak:  Math.max(...playerTurns[p]),
+  })).sort((a, b) => b.final - a.final);
+  sb.innerHTML = sorted.map(pl =>
+    `<span class="money-pill" style="border-color:${pl.color};color:${pl.color}">
+      ${pl.name}: <strong>$${pl.final.toLocaleString()}</strong>
+      <span class="money-peak"> peak $${pl.peak.toLocaleString()}</span>
+    </span>`
+  ).join('');
+
+  if (chartMoney) chartMoney.destroy();
+  const ctx = document.getElementById('chartMoney').getContext('2d');
+  chartMoney = new Chart(ctx, {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      ...CHART_OPTS,
+      animation: false,
+      plugins: {
+        ...CHART_OPTS.plugins,
+        tooltip: {
+          mode: 'index',
+          intersect: false,
+          callbacks: {
+            title: ctx => `Turn ${ctx[0].label}`,
+            label: ctx => ` ${ctx.dataset.label}: $${ctx.raw.toLocaleString()}`,
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color:'#aaa', maxTicksLimit:20 },
+          grid:  { color:'rgba(255,255,255,.05)' },
+          title: { display:true, text:'Turn', color:'#aaa' },
+        },
+        y: {
+          ticks: { color:'#ccc', callback: v => '$'+v.toLocaleString() },
+          grid:  { color:'rgba(255,255,255,.08)' },
+          title: { display:true, text:'Cash', color:'#ffd700' },
+        }
+      }
+    }
+  });
+}
+
+// ================================================================
+// EVENT LISTENERS & INIT
+// ================================================================
+document.getElementById('runBtn').addEventListener('click', () => {
+  resetAll();
+  const n = parseInt(document.getElementById('numPlayers').value);
+  startAnim(n);
+});
+document.getElementById('skipBtn').addEventListener('click', skipToResults);
+document.getElementById('resetBtn').addEventListener('click', resetAll);
+
+document.getElementById('numPlayers').addEventListener('change', () => {
+  if (!gRunning) {
+    const n = parseInt(document.getElementById('numPlayers').value);
+    positionTokens(new Array(n).fill(0), n);
+  }
+});
+
+// Speed slider changes the interval on-the-fly
+document.getElementById('speedSlider').addEventListener('input', () => {
+  if (gRunning && gTimer) {
+    clearInterval(gTimer);
+    gTimer = setInterval(tick, getSpeed());
+  }
+});
+
+// Initialize board and tokens
+renderBoard();
+positionTokens([0,0,0,0], parseInt(document.getElementById('numPlayers').value));
+
+// ================================================================
+// HOUSE DISPLAY HELPERS
+// ================================================================
+function updateHouseDisplay(housesObj) {
+  for (const [idStr, count] of Object.entries(housesObj)) {
+    const el = document.getElementById(`hind${idStr}`);
+    if (!el) continue;
+    if (!count || count === 0) { el.style.display='none'; el.textContent=''; continue; }
+    el.style.display='block';
+    if (count === 5) {
+      el.textContent='🏨';
+      el.className='house-ind hotel';
+    } else {
+      el.textContent='🏠'.repeat(count);
+      el.className='house-ind';
+    }
+  }
+}
+
+function clearHouseDisplay() {
+  document.querySelectorAll('.house-ind').forEach(el=>{
+    el.style.display='none'; el.textContent=''; el.className='house-ind';
+  });
+}
+
+// ================================================================
+// TAB SWITCHING
+// ================================================================
+const TAB_MAP = [
+  { key:'sim',       btnId:'tab-sim',       viewId:'sim-view' },
+  { key:'props',     btnId:'tab-props',     viewId:'proplist-view' },
+  { key:'breakdown', btnId:'tab-breakdown', viewId:'breakdown-view' },
+];
+function switchTab(tab) {
+  TAB_MAP.forEach(({key, btnId, viewId}) => {
+    document.getElementById(viewId).style.display = (key===tab) ? '' : 'none';
+    document.getElementById(btnId).classList.toggle('active', key===tab);
+  });
+  if (tab==='props')     buildPropList(gSim ? calcROI(gSim.roiCounts, gSim.rentCollected) : null);
+  if (tab==='breakdown') buildBreakdown();
+}
+
+// ================================================================
+// HOUSE ROI BREAKDOWN — spreadsheet of ROI at every house level
+// ================================================================
+// ROI(level) = (landings × rent[level]) / (price + level × houseCost)
+// level 0 = no houses (just purchase), level 5 = hotel
+
+// Column labels for colored properties (house levels)
+const PROP_LEVEL_LABELS = ['Base','1 House','2 Houses','3 Houses','4 Houses','Hotel'];
+// Column labels for railroads (ownership tiers)
+const RR_LEVEL_LABELS   = ['Own 1 RR','Own 2 RRs','Own 3 RRs','Own 4 RRs', null, null];
+// Column labels for utilities
+const UTIL_LEVEL_LABELS = ['Own 1 Util','Own Both', null, null, null, null];
+
+// Railroad rents per ownership count (1–4 owned)
+const RR_RENTS = [25, 50, 100, 200];
+// Utility rents use average dice (7) times multiplier
+const UTIL_RENTS = [4 * AVG_DICE_GLOBAL, 10 * AVG_DICE_GLOBAL]; // 28, 70
+
+function calcAllLevelROI(counts) {
+  return SPACES
+    .filter(sp => sp.type==='property' || sp.type==='railroad' || sp.type==='utility')
+    .map(sp => {
+      const lands = counts ? (counts[sp.id]||0) : 0;
+      let rois, levelLabels;
+
+      if (sp.type === 'railroad') {
+        // Columns = owning 1, 2, 3, 4 railroads; last 2 columns unused
+        rois = RR_RENTS.map((rent, i) => {
+          // Investment = this railroad's $200 price (synergy multiplies rent, not cost)
+          return lands > 0 ? Math.round(lands * rent / sp.price * 1000) / 1000 : 0;
+        }).concat([null, null]);
+        levelLabels = RR_LEVEL_LABELS;
+
+      } else if (sp.type === 'utility') {
+        // Columns = owning 1 utility, owning both; remaining columns unused
+        rois = UTIL_RENTS.map(rent =>
+          lands > 0 ? Math.round(lands * rent / sp.price * 1000) / 1000 : 0
+        ).concat([null, null, null, null]);
+        levelLabels = UTIL_LEVEL_LABELS;
+
+      } else {
+        // Standard property: 6 house levels (0 = no houses, 5 = hotel)
+        rois = sp.rent.map((rent, level) => {
+          const invest = sp.price + level * (sp.hc||0);
+          return invest > 0 ? Math.round(lands * rent / invest * 1000) / 1000 : 0;
+        });
+        levelLabels = PROP_LEVEL_LABELS;
+      }
+
+      const validRois = rois.filter(r => r !== null && r > 0);
+      const maxRoi    = validRois.length ? Math.max(...validRois) : 0;
+      const bestLvl   = rois.lastIndexOf(maxRoi);
+      return { sp, lands, rois, levelLabels, bestLvl, maxRoi };
+    });
+}
+
+// Map a 0–1 fraction to a red→yellow→green color string
+function roiColor(frac) {
+  // frac 0 = dark red, 0.5 = yellow, 1 = dark green
+  if (frac < 0.5) {
+    const r = 180 + Math.round(frac*2*75);     // 180→255
+    const g = Math.round(frac*2*160);           // 0→160
+    return `rgb(${r},${g},30)`;
+  } else {
+    const f = (frac-0.5)*2;
+    const r = Math.round((1-f)*255);            // 255→0
+    const g = 140 + Math.round(f*75);           // 140→215
+    return `rgb(${r},${g},40)`;
+  }
+}
+
+function buildBreakdown() {
+  const counts = gSim ? gSim.roiCounts : null;
+  const rows   = calcAllLevelROI(counts);
+  const hasSim = !!counts;
+
+  document.getElementById('bd-hint').textContent = hasSim
+    ? `Showing ROI from last simulation · ${gNumPlayers}-player · ${NUM_TURNS} turns · $${CASH_BUFFER} cash buffer · RR/utility rent reflects actual ownership during play`
+    : 'Rent values always shown. Run a simulation to see ROI scores. Railroad columns = tiers of ownership (1–4 RRs). Utility columns = solo vs. monopoly.';
+
+  // Apply sort
+  const sortKey = document.getElementById('bd-sort').value;
+  if (sortKey === 'lands') {
+    rows.sort((a,b) => b.lands - a.lands);
+  } else if (sortKey !== 'color') {
+    const lvl = parseInt(sortKey.replace('roi',''));
+    rows.sort((a,b) => (b.rois[lvl]||0) - (a.rois[lvl]||0));
+  }
+
+  // Per-column max ROI for color scaling (ignore null levels)
+  const colMax = [0,1,2,3,4,5].map(lvl =>
+    Math.max(...rows.map(r => r.rois[lvl] ?? 0), 0.001)
+  );
+
+  const tbody = document.getElementById('bd-tbody');
+  tbody.innerHTML = '';
+
+  rows.forEach(({sp, lands, rois, levelLabels, bestLvl}) => {
+    const colorHex = sp.color && CDISP[sp.color] ? CDISP[sp.color].hex : '#888';
+    const tr = document.createElement('tr');
+
+    // Property name cell
+    const tdName = document.createElement('td');
+    tdName.className = 'col-prop';
+    tdName.innerHTML = `<div class="bd-name">
+      <div class="bd-dot" style="background:${colorHex}"></div>
+      <span class="bd-propname">${sp.name}</span>
+    </div>`;
+    tr.appendChild(tdName);
+
+    // Landings cell
+    const tdLands = document.createElement('td');
+    tdLands.innerHTML = hasSim
+      ? `<span class="bd-lands">${lands}</span>`
+      : `<span class="bd-lands na">—</span>`;
+    tr.appendChild(tdLands);
+
+    // Six level cells
+    rois.forEach((roi, lvl) => {
+      const td = document.createElement('td');
+      const label = levelLabels[lvl]; // null = this column doesn't apply
+
+      if (label === null) {
+        // Column not applicable for this property type
+        td.innerHTML = `<span style="color:#2a2a2a;font-size:.7rem">—</span>`;
+        tr.appendChild(td);
+        return;
+      }
+
+      // Compute display values based on property type
+      let rentDisplay, investDisplay;
+      if (sp.type === 'railroad') {
+        rentDisplay   = `$${RR_RENTS[lvl]} rent`;
+        investDisplay = `$${sp.price} inv`;
+      } else if (sp.type === 'utility') {
+        rentDisplay   = `$${UTIL_RENTS[lvl]} avg rent`;
+        investDisplay = `$${sp.price} inv`;
+      } else {
+        rentDisplay   = `$${sp.rent[lvl]} rent`;
+        investDisplay = `$${sp.price + lvl*(sp.hc||0)} inv`;
+      }
+
+      if (!hasSim) {
+        td.innerHTML = `<div class="roi-cell na-cell">
+          <span class="rc-rent" style="color:#888">${rentDisplay}</span>
+          <span class="rc-invest" style="color:#555">${investDisplay}</span>
+        </div>`;
+      } else {
+        const frac   = colMax[lvl] > 0 ? (roi||0) / colMax[lvl] : 0;
+        const bg     = roiColor(frac);
+        const isBest = lvl === bestLvl && roi > 0;
+        td.innerHTML = `<div class="roi-cell${isBest?' best':''}" style="background:${bg}22;border:1px solid ${bg}44">
+          <span class="rc-roi" style="color:${bg}">${roi > 0 ? roi.toFixed(3) : '—'}${isBest?' ★':''}</span>
+          <span class="rc-rent">${rentDisplay}</span>
+          <span class="rc-invest">${investDisplay}</span>
+        </div>`;
+      }
+      tr.appendChild(td);
+    });
+
+    // Best level badge
+    const tdBest = document.createElement('td');
+    const bestLabel = levelLabels[bestLvl];
+    if (hasSim && rois[bestLvl] > 0 && bestLabel) {
+      tdBest.innerHTML = `<div style="text-align:center;font-size:.72rem;font-weight:bold;color:${colorHex}">${bestLabel}</div>`;
+    } else {
+      tdBest.innerHTML = `<span style="color:#444;font-size:.72rem">—</span>`;
+    }
+    tr.appendChild(tdBest);
+    tbody.appendChild(tr);
+  });
+}
+
+// ================================================================
+// PROPERTY LIST — definitions for the full reference sheet
+// ================================================================
+
+// Groups in board order, each has a label, hex color, and member space ids
+const PROP_GROUPS = [
+  { key:'brown',    label:'Brown',     hex:'#8B4513', ids:[1,3] },
+  { key:'lightblue',label:'Light Blue',hex:'#87CEEB', ids:[6,8,9] },
+  { key:'pink',     label:'Pink',      hex:'#D93A96', ids:[11,13,14] },
+  { key:'orange',   label:'Orange',    hex:'#F7941D', ids:[16,18,19] },
+  { key:'red',      label:'Red',       hex:'#ED1B24', ids:[21,23,24] },
+  { key:'yellow',   label:'Yellow',    hex:'#d4b800', ids:[26,27,29] },
+  { key:'green',    label:'Green',     hex:'#1FB25A', ids:[31,32,34] },
+  { key:'darkblue', label:'Dark Blue', hex:'#0072BB', ids:[37,39] },
+  { key:'railroad', label:'Railroads', hex:'#555',    ids:[5,15,25,35] },
+  { key:'utility',  label:'Utilities', hex:'#90a4ae', ids:[12,28] },
+];
+
+// Assign a star rating + label based on rank out of total purchasable props
+function getRating(rank, total) {
+  const pct = rank / total;
+  if (pct <= 0.18) return { stars:'★★★★', label:'Excellent', color:'#66bb6a' };
+  if (pct <= 0.45) return { stars:'★★★',  label:'Good',      color:'#ffd700' };
+  if (pct <= 0.75) return { stars:'★★',   label:'Average',   color:'#ffa726' };
+  return              { stars:'★',    label:'Weak',      color:'#ef5350' };
+}
+
+function buildPropList(roiData) {
+  // roiData: sorted array from calcROI(), or null if no sim yet
+  const container = document.getElementById('proplist-groups');
+  container.innerHTML = '';
+
+  // Build a lookup by space id → {roi, rank}
+  const roiMap = {};
+  if (roiData) {
+    const total = roiData.length;
+    roiData.forEach((r, idx) => { roiMap[r.id] = { roi: r.roi, rank: idx + 1, total }; });
+  }
+
+  // Max ROI across all properties (for bar scaling)
+  const maxROI = roiData ? roiData[0].roi : 1;
+
+  // Hint line
+  document.getElementById('proplist-hint').textContent = roiData
+    ? `Showing ROI from last simulation (${gNumPlayers}-player · 100 turns). Ratings are relative rankings.`
+    : 'All purchasable properties — run a simulation on the Board tab to see live ROI scores and ratings.';
+
+  PROP_GROUPS.forEach(group => {
+    const groupEl = document.createElement('div');
+    groupEl.className = 'pgroup';
+    groupEl.dataset.groupKey = group.key;
+
+    // Group header
+    groupEl.innerHTML = `
+      <div class="pgroup-header" style="background:${group.hex}22;border-bottom:2px solid ${group.hex}">
+        <div class="pgroup-swatch" style="background:${group.hex}"></div>
+        <span>${group.label}</span>
+      </div>
+      <div class="prow prow-head">
+        <span>Property</span>
+        <span style="text-align:right">Price</span>
+        <span style="text-align:right">Buy-in*</span>
+        <span style="text-align:right">${
+          group.key==='railroad' ? '1–4 RR Rent' :
+          group.key==='utility'  ? '1 Util Rent' :
+          '1-House Rent'
+        }</span>
+        <span style="text-align:right">${
+          group.key==='railroad' ? '(4 RRs)' :
+          group.key==='utility'  ? '2 Utils Rent' :
+          'Hotel Rent'
+        }</span>
+        <span style="text-align:right">ROI Score</span>
+        <span style="text-align:right">Rating</span>
+      </div>
+    `;
+
+    group.ids.forEach(id => {
+      const sp = SPACES[id];
+      const info = roiMap[id];
+      const investment = sp.price + (sp.hc || 0);
+
+      // Rent display: properties use house levels, RR/utility use ownership tiers
+      let rent1, hotelRent;
+      if (sp.type === 'railroad') {
+        rent1     = '25 / 50 / 100 / 200';  // tiers for 1–4 owned
+        hotelRent = '(all 4 RRs)';
+      } else if (sp.type === 'utility') {
+        rent1     = `4× roll (~$${4*AVG_DICE_GLOBAL})`;
+        hotelRent = `10× roll (~$${10*AVG_DICE_GLOBAL})`;
+      } else {
+        rent1     = sp.rent[1];
+        hotelRent = sp.rent[5];
+      }
+
+      let roiCell, ratingCell;
+      if (info) {
+        const rt = getRating(info.rank, info.total);
+        const barWidth = Math.round((info.roi / maxROI) * 100);
+        roiCell = `<span class="pr-roi">${info.roi.toFixed(3)}</span>`;
+        ratingCell = `
+          <div class="pr-rating">
+            <span class="stars" style="color:${rt.color}" title="${rt.label}">${rt.stars}</span>
+            <div class="roi-bar-wrap"><div class="roi-bar" style="width:${barWidth}%;background:${rt.color}"></div></div>
+          </div>`;
+      } else {
+        roiCell = `<span class="pr-roi na">—</span>`;
+        ratingCell = `<div class="pr-rating"><span class="stars" style="color:#444">—</span></div>`;
+      }
+
+      const row = document.createElement('div');
+      row.className = 'prow';
+      row.dataset.groupKey = group.key;
+      row.innerHTML = `
+        <span class="pr-name">${sp.name}</span>
+        <span class="pr-price">$${sp.price}</span>
+        <span class="pr-invest">$${investment}</span>
+        <span class="pr-rent1">$${rent1}</span>
+        <span class="pr-hotel">$${hotelRent}</span>
+        ${roiCell}
+        ${ratingCell}
+      `;
+      groupEl.appendChild(row);
+    });
+
+    container.appendChild(groupEl);
+  });
+
+  // Re-apply any active filter
+  const activeChip = document.querySelector('#prop-filters .fchip.active');
+  if (activeChip) applyFilter(activeChip.dataset.filter);
+}
+
+// ================================================================
+// FILTER CHIPS
+// ================================================================
+function applyFilter(key) {
+  document.querySelectorAll('#proplist-groups .pgroup').forEach(g => {
+    g.style.display = (key === 'all' || g.dataset.groupKey === key) ? '' : 'none';
+  });
+}
+
+document.querySelectorAll('#prop-filters .fchip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    document.querySelectorAll('#prop-filters .fchip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    applyFilter(chip.dataset.filter);
+  });
+});
+
+// Build the list and breakdown once on load (no ROI data yet)
+buildPropList(null);
+buildBreakdown();
+</script>
+</body>
+</html>
