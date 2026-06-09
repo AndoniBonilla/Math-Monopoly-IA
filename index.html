@@ -286,6 +286,7 @@ input[type=range]{width:90px;accent-color:#ffd700}
 #log-list li.ev-rr      {border-color:#26c6da}
 #log-list li.ev-go      {border-color:#66bb6a}
 #log-list li.ev-bankrupt{border-color:#ff6b6b;color:#ff6b6b;font-weight:bold}
+#log-list li.ev-trade   {border-color:#ab47bc;color:#ce93d8}
 
 /* ===== EVENT BANNER ===== */
 #banner{
@@ -813,7 +814,9 @@ function drawChance(pos) {
     case "reading":   to=5;  desc='Chance → Reading RR'; break;
     case "boardwalk": to=39; desc='Chance → Boardwalk'; break;
   }
-  return {to, desc};
+  // Forward advances (not back3, not jail) that wrap around the board collect $200
+  const passedGo = eff !== 'back3' && eff !== 'jail' && eff !== 'none' && to !== pos && to < pos;
+  return {to, desc, passedGo};
 }
 
 function drawChest(pos) {
@@ -821,7 +824,9 @@ function drawChest(pos) {
   let to = pos, desc = 'Community Chest: no effect';
   if (eff==="go")   { to=0;  desc='Chest → Advance to GO'; }
   if (eff==="jail") { to=10; desc='Chest → Go to Jail!'; }
-  return {to, desc};
+  // "Advance to GO" always crosses GO; "Go to Jail" never collects
+  const passedGo = eff === 'go';
+  return {to, desc, passedGo};
 }
 
 function nearRR(pos) {
@@ -911,6 +916,102 @@ function runSim(numPlayers, turns) {
     return changes;
   }
 
+  // Helper: transfer one property, clearing houses if seller loses their monopoly.
+  // Pushes the ownership change to ownerChanges and any house removals to houseChanges.
+  function transferProp(fromP, toP, propId, ownerChanges, houseChanges) {
+    const sp  = SPACES[propId];
+    const grp = (sp.color && COLOR_GROUP_MAP[sp.color]) || [];
+    const hadMonopoly = grp.length > 0 && grp.every(id => propOwner[id] === fromP);
+    propOwner[propId] = toP;
+    houses[propId] = 0;
+    houseChanges.push({ id: propId, count: 0 });
+    if (hadMonopoly) {
+      grp.forEach(id => {
+        if (propOwner[id] === fromP && (houses[id] || 0) > 0) {
+          houses[id] = 0;
+          houseChanges.push({ id, count: 0 });
+        }
+      });
+    }
+    ownerChanges.push({ id: propId, player: toP });
+  }
+
+  // Try one trade per turn: buyer attempts to acquire a needed property via
+  // cash payment (up to price+$800 or 1.5× price) or a same-value property swap.
+  function tryTrade(buyer, ownerChanges, events, houseChanges) {
+    for (const [color, ids] of Object.entries(COLOR_GROUP_MAP)) {
+      const buyerOwns = ids.filter(id => propOwner[id] === buyer);
+      if (buyerOwns.length === 0) continue; // no stake in this color
+
+      const needed = ids.filter(id =>
+        propOwner[id] !== undefined && propOwner[id] !== buyer
+      );
+      if (needed.length === 0) continue; // already complete or fully unowned
+
+      for (const needId of needed) {
+        const seller = propOwner[needId];
+        if (bankrupt[seller]) continue;
+        const sp = SPACES[needId];
+
+        // ── Cash offer ──────────────────────────────────────────────
+        const cashCap   = Math.min(sp.price + 800, Math.floor(sp.price * 1.5));
+        const cashOffer = Math.min(cashCap, cash[buyer] - CASH_BUFFER);
+
+        // Seller is reluctant if giving this up breaks their own near-complete set
+        const sellerInGroup = ids.filter(id => propOwner[id] === seller).length;
+        const isKeyForSeller = sellerInGroup >= ids.length - 1;
+        const minAsk = isKeyForSeller ? sp.price * 2.0 : sp.price;
+
+        if (cashOffer >= minAsk) {
+          cash[buyer]  -= cashOffer;
+          cash[seller] += cashOffer;
+          transferProp(seller, buyer, needId, ownerChanges, houseChanges);
+          events.push({ type:'trade',
+            desc:`🤝 ${PNAMES[buyer]} paid $${cashOffer} to ${PNAMES[seller]} for ${sp.short}` });
+          return;
+        }
+
+        // ── Property swap (+/- small cash adjustment) ───────────────
+        // Find a "spare" property of buyer's (sole property in its color group)
+        // that helps seller AND has a similar face value.
+        const buyerSpares = Object.keys(propOwner)
+          .map(Number)
+          .filter(id => {
+            if (propOwner[id] !== buyer) return false;
+            const s = SPACES[id];
+            if (!s.color) return false; // no RR/utility swaps
+            const g = COLOR_GROUP_MAP[s.color] || [];
+            // "Spare" = buyer only owns 1 of this color (not building that set)
+            return g.filter(gid => propOwner[gid] === buyer).length === 1;
+          });
+
+        for (const offerId of buyerSpares) {
+          const offerSp  = SPACES[offerId];
+          const offerGrp = COLOR_GROUP_MAP[offerSp.color] || [];
+          // Only swap if seller already has some of offer's color (it helps them)
+          if (offerGrp.filter(id => propOwner[id] === seller).length === 0) continue;
+          // Value within 50%
+          if (Math.abs(offerSp.price - sp.price) > sp.price * 0.5) continue;
+
+          // Cash adjustment: buyer pays half the difference upward
+          const adj = Math.round((sp.price - offerSp.price) * 0.5);
+          if (adj > 0 && cash[buyer]  - adj < CASH_BUFFER) continue;
+          if (adj < 0 && cash[seller] + adj < CASH_BUFFER) continue;
+
+          transferProp(seller, buyer,  needId,  ownerChanges, houseChanges);
+          transferProp(buyer,  seller, offerId, ownerChanges, houseChanges);
+          cash[buyer]  -= adj;
+          cash[seller] += adj;
+
+          const adjStr = adj > 0 ? ` + $${adj}` : adj < 0 ? ` (+ $${-adj})` : '';
+          events.push({ type:'trade',
+            desc:`🤝 ${PNAMES[buyer]} swapped ${offerSp.short}${adjStr} ↔ ${sp.short} w/ ${PNAMES[seller]}` });
+          return;
+        }
+      }
+    }
+  }
+
   for (let turn=0; turn<turns; turn++) {
     for (let p=0; p<numPlayers; p++) {
       if (bankrupt[p]) continue;
@@ -927,15 +1028,21 @@ function runSim(numPlayers, turns) {
 
       // Chance card
       if (pos===7||pos===22||pos===36) {
-        const {to, desc} = drawChance(pos);
-        if (to!==pos) { pos=to; events.push({type:'chance', desc}); }
-        else           events.push({type:'chance', desc});
+        const {to, desc, passedGo: cardGo} = drawChance(pos);
+        if (to!==pos) {
+          if (cardGo) { cash[p] += 200; events.push({type:'go', desc:'Passed GO (card)'}); }
+          pos=to;
+          events.push({type:'chance', desc});
+        } else { events.push({type:'chance', desc}); }
       }
       // Community Chest
       else if (pos===2||pos===17||pos===33) {
-        const {to, desc} = drawChest(pos);
-        if (to!==pos) { pos=to; events.push({type:'chest', desc}); }
-        else           events.push({type:'chest', desc});
+        const {to, desc, passedGo: cardGo} = drawChest(pos);
+        if (to!==pos) {
+          if (cardGo) { cash[p] += 200; events.push({type:'go', desc:'Passed GO (card)'}); }
+          pos=to;
+          events.push({type:'chest', desc});
+        } else { events.push({type:'chest', desc}); }
       }
 
       // Go To Jail space
@@ -1025,6 +1132,8 @@ function runSim(numPlayers, turns) {
 
       // Try to build houses (skip if just went bankrupt)
       const houseChanges = bankrupt[p] ? [] : tryBuild(p);
+      // Try one trade to complete a color set (also skip if bankrupt)
+      if (!bankrupt[p]) tryTrade(p, ownerChanges, events, houseChanges);
       if (houseChanges.length > 0) {
         houseChanges.forEach(({id, count}) => {
           const label = count===5 ? '🏨 Hotel' : `🏠 ${count} House${count>1?'s':''}`;
@@ -1345,6 +1454,9 @@ function handleEvents(fr) {
       addLog(`${pLetter}: ${ev.desc}`, 'ev-go');   // green — good event
     } else if (ev.type==='house') {
       addLog(`${pLetter}: ${ev.desc}`, 'ev-rent');  // gold — house built
+    } else if (ev.type==='trade') {
+      addLog(ev.desc, 'ev-trade');
+      showBanner(ev.desc, 'bj');
     } else if (ev.type==='bankrupt') {
       addLog(ev.desc, 'ev-bankrupt');
       showBanner(ev.desc, 'br');
